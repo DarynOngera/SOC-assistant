@@ -95,16 +95,22 @@ const SOCDashboard = () => {
             label: 'Threats Detected',
             data: [12, 19, 8, 15, 22, 18, 25],
             borderColor: '#ef4444',
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            backgroundColor: 'rgba(239, 68, 68, 0.05)',
             tension: 0.4,
-            fill: true
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 5
           }, {
             label: 'Anomalies',
             data: [5, 8, 3, 7, 12, 9, 15],
             borderColor: '#f59e0b',
-            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            backgroundColor: 'rgba(245, 158, 11, 0.05)',
             tension: 0.4,
-            fill: true
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 5
           }]
         },
         options: {
@@ -113,15 +119,29 @@ const SOCDashboard = () => {
           plugins: {
             legend: {
               position: 'top',
+              labels: {
+                usePointStyle: true,
+                padding: 20,
+                font: { size: 12 },
+                color: '#4b5563'
+              }
             },
             title: {
               display: true,
-              text: 'Threat Detection Timeline'
+              text: 'Threat Detection Timeline',
+              font: { size: 14, weight: '500' },
+              color: '#374151'
             }
           },
           scales: {
             y: {
-              beginAtZero: true
+              beginAtZero: true,
+              grid: { color: '#e5e7eb' },
+              ticks: { color: '#6b7280', font: { size: 11 } }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#6b7280', font: { size: 11 } }
             }
           }
         }
@@ -144,14 +164,10 @@ const SOCDashboard = () => {
               stats.medium_alerts || 8,
               stats.low_alerts || 15
             ],
-            backgroundColor: [
-              '#dc2626',
-              '#ea580c',
-              '#d97706',
-              '#65a30d'
-            ],
-            borderWidth: 2,
-            borderColor: '#ffffff'
+            backgroundColor: ['#dc2626', '#f59e0b', '#facc15', '#4ade80'],
+            borderWidth: 0,
+            hoverBorderWidth: 4,
+            hoverBorderColor: '#ffffff'
           }]
         },
         options: {
@@ -160,10 +176,18 @@ const SOCDashboard = () => {
           plugins: {
             legend: {
               position: 'bottom',
+              labels: {
+                usePointStyle: true,
+                padding: 15,
+                font: { size: 12 },
+                color: '#4b5563'
+              }
             },
             title: {
               display: true,
-              text: 'Alert Severity Distribution'
+              text: 'Alert Severity Distribution',
+              font: { size: 14, weight: '500' },
+              color: '#374151'
             }
           }
         }
@@ -182,32 +206,34 @@ const SOCDashboard = () => {
           datasets: [{
             label: 'Alert Count',
             data: [8, 15, 22, 18, 12],
-            backgroundColor: [
-              '#10b981',
-              '#06b6d4',
-              '#3b82f6',
-              '#8b5cf6',
-              '#ef4444'
-            ],
-            borderColor: '#ffffff',
-            borderWidth: 1
+            backgroundColor: ['#a7f3d0', '#a5f3fc', '#bfdbfe', '#ddd6fe', '#fecaca'],
+            borderColor: ['#059669', '#0891b2', '#2563eb', '#7c3aed', '#dc2626'],
+            borderWidth: 1,
+            borderRadius: 4,
+            hoverBackgroundColor: ['#6ee7b7', '#67e8f9', '#93c5fd', '#c4b5fd', '#fca5a5']
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: {
-              display: false
-            },
+            legend: { display: false },
             title: {
               display: true,
-              text: 'Anomaly Score Distribution'
+              text: 'Anomaly Score Distribution',
+              font: { size: 14, weight: '500' },
+              color: '#374151'
             }
           },
           scales: {
             y: {
-              beginAtZero: true
+              beginAtZero: true,
+              grid: { color: '#e5e7eb' },
+              ticks: { color: '#6b7280', font: { size: 11 } }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#6b7280', font: { size: 11 } }
             }
           }
         }
@@ -318,11 +344,11 @@ const SOCDashboard = () => {
 
   const getSeverityColor = (severity) => {
     switch (severity?.toLowerCase()) {
-      case 'critical': return 'bg-red-100 text-red-800 border-red-200';
-      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'low': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'critical': return 'bg-red-50 text-red-700 border-red-200';
+      case 'high': return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'medium': return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+      case 'low': return 'bg-green-50 text-green-700 border-green-200';
+      default: return 'bg-gray-50 text-gray-700 border-gray-200';
     }
   };
 
@@ -337,21 +363,21 @@ const SOCDashboard = () => {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen gradient-bg flex items-center justify-center">
-        <div className="glass-effect rounded-2xl p-8 w-full max-w-md shadow-2xl">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="bg-white shadow-md rounded-xl p-8 w-full max-w-sm border border-gray-200">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">SOC Assistant</h1>
-            <p className="text-blue-100">Intelligent Security Operations Center</p>
+            <h1 className="text-2xl font-semibold text-gray-800 mb-2">SOC Assistant</h1>
+            <p className="text-sm text-gray-500">Security Operations Center</p>
           </div>
           
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <input
                 type="text"
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-white/20 border border-white/30 text-white placeholder-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="input-field w-full px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none"
                 required
               />
             </div>
@@ -361,13 +387,13 @@ const SOCDashboard = () => {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-white/20 border border-white/30 text-white placeholder-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="input-field w-full px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none"
                 required
               />
             </div>
             
             {error && (
-              <div className="bg-red-500/20 border border-red-300 text-red-100 px-4 py-3 rounded-lg">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
@@ -375,7 +401,7 @@ const SOCDashboard = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-white/20 hover:bg-white/30 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 disabled:opacity-50"
+              className="btn-primary w-full py-3 px-4 focus:outline-none disabled:opacity-50"
             >
               {loading ? 'Signing In...' : 'Sign In'}
             </button>
@@ -388,76 +414,76 @@ const SOCDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <header className="header">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">SOC Dashboard</h1>
-              <div className="ml-4 flex items-center">
-                <div className="w-3 h-3 bg-green-400 rounded-full threat-pulse mr-2"></div>
-                <span className="text-sm text-gray-600">Live Monitoring</span>
+            <div className="flex items-center space-x-4">
+              <h1 className="text-xl font-semibold text-gray-800">SOC Dashboard</h1>
+              <div className="flex items-center space-x-2">
+                <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-xs text-gray-500">Live</span>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">Welcome, {user}</span>
+              <span className="text-sm text-gray-600">{user}</span>
               <button
                 onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-300"
+                className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
               >
-                Logout
+                Sign Out
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <span className="text-2xl">🚨</span>
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Alerts</p>
+                <p className="text-2xl font-semibold text-gray-800 mt-1">{stats.total_alerts || 0}</p>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Alerts</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total_alerts || 0}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <span className="text-2xl">⚡</span>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Critical</p>
-                <p className="text-2xl font-bold text-red-600">{stats.critical_alerts || 0}</p>
+              <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
+                <span className="text-red-600 text-sm">🚨</span>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <span className="text-2xl">📊</span>
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Critical</p>
+                <p className="text-2xl font-semibold text-red-600 mt-1">{stats.critical_alerts || 0}</p>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Avg Anomaly Score</p>
-                <p className="text-2xl font-bold text-blue-600">{(stats.avg_anomaly_score || 0).toFixed(2)}</p>
+              <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
+                <span className="text-orange-600 text-sm">⚡</span>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <span className="text-2xl">🔍</span>
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Avg Score</p>
+                <p className="text-2xl font-semibold text-blue-600 mt-1">{(stats.avg_anomaly_score || 0).toFixed(2)}</p>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Processed</p>
-                <p className="text-2xl font-bold text-green-600">{stats.processed_sequences || 0}</p>
+              <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+                <span className="text-blue-600 text-sm">📊</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Processed</p>
+                <p className="text-2xl font-semibold text-green-600 mt-1">{stats.processed_sequences || 0}</p>
+              </div>
+              <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
+                <span className="text-green-600 text-sm">🔍</span>
               </div>
             </div>
           </div>
@@ -465,19 +491,19 @@ const SOCDashboard = () => {
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="card p-6">
             <div className="chart-container">
               <canvas ref={threatTrendRef}></canvas>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="card p-6">
             <div className="chart-container">
               <canvas ref={severityDistRef}></canvas>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="card p-6">
             <div className="chart-container">
               <canvas ref={anomalyScoreRef}></canvas>
             </div>
@@ -485,35 +511,35 @@ const SOCDashboard = () => {
         </div>
 
         {/* NLP Insights Section */}
-        <div className="bg-white rounded-lg shadow mb-8">
+        <div className="card mb-8">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-              <span className="text-2xl mr-2">🧠</span>
-              AI-Powered Security Insights
+            <h2 className="text-lg font-medium text-gray-800 flex items-center">
+              <span className="text-lg mr-2">🧠</span>
+              AI Security Insights
             </h2>
           </div>
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {nlpInsights.map((insight) => (
-                <div key={insight.id} className="insight-card rounded-lg p-4 shadow-sm">
+                <div key={insight.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center">
-                      <span className="text-xl mr-2">{getInsightIcon(insight.type)}</span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getSeverityColor(insight.severity)}`}>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm">{getInsightIcon(insight.type)}</span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getSeverityColor(insight.severity)}`}>
                         {insight.severity.toUpperCase()}
                       </span>
                     </div>
                     <div className="text-xs text-gray-500">
-                      {(insight.confidence * 100).toFixed(0)}% confidence
+                      {(insight.confidence * 100).toFixed(0)}%
                     </div>
                   </div>
-                  <h3 className="font-semibold text-gray-900 mb-2">{insight.title}</h3>
-                  <p className="text-sm text-gray-600 mb-3">{insight.description}</p>
+                  <h3 className="font-medium text-gray-800 mb-2 text-sm">{insight.title}</h3>
+                  <p className="text-xs text-gray-600 mb-3 leading-relaxed">{insight.description}</p>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-500">
                       {new Date(insight.timestamp).toLocaleTimeString()}
                     </span>
-                    <button className="text-blue-600 hover:text-blue-800 text-xs font-medium">
+                    <button className="text-blue-600 hover:text-blue-700 text-xs font-medium transition-colors">
                       Investigate →
                     </button>
                   </div>
@@ -524,15 +550,15 @@ const SOCDashboard = () => {
         </div>
 
         {/* Alerts Section */}
-        <div className="bg-white rounded-lg shadow">
+        <div className="card">
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-900">Security Alerts</h2>
-              <div className="flex space-x-4">
+              <h2 className="text-lg font-medium text-gray-800">Security Alerts</h2>
+              <div className="flex space-x-3">
                 <select
                   value={filters.severity}
                   onChange={(e) => setFilters({...filters, severity: e.target.value})}
-                  className="border border-gray-300 rounded-md px-3 py-1 text-sm"
+                  className="input-field bg-white px-3 py-1 text-sm focus:outline-none"
                 >
                   <option value="">All Severities</option>
                   <option value="critical">Critical</option>
@@ -544,7 +570,7 @@ const SOCDashboard = () => {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="border border-gray-300 rounded-md px-3 py-1 text-sm"
+                  className="input-field bg-white px-3 py-1 text-sm focus:outline-none"
                 >
                   <option value="timestamp">Time</option>
                   <option value="severity">Severity</option>
@@ -569,51 +595,53 @@ const SOCDashboard = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-4 text-center text-gray-500">Loading alerts...</td>
+                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500 text-sm">Loading alerts...</td>
                   </tr>
                 ) : alerts.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-4 text-center text-gray-500">No alerts found</td>
+                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500 text-sm">No alerts found</td>
                   </tr>
                 ) : (
                   alerts.map((alert) => (
-                    <tr key={alert.id} className="hover:bg-gray-50">
+                    <tr key={alert.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{alert.alert}</div>
+                        <div className="text-sm text-gray-800">{alert.alert}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getSeverityColor(alert.severity)}`}>
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full border ${getSeverityColor(alert.severity)}`}>
                           {alert.severity}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="text-sm text-gray-900">{alert.anomaly_score?.toFixed(2)}</div>
-                          <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
+                        <div className="flex items-center space-x-2">
+                          <div className="text-sm text-gray-800">{alert.anomaly_score?.toFixed(2)}</div>
+                          <div className="w-16 bg-gray-200 rounded-full h-1.5">
                             <div 
-                              className="bg-red-500 h-2 rounded-full" 
+                              className="bg-blue-500 h-1.5 rounded-full transition-all" 
                               style={{width: `${(alert.anomaly_score || 0) * 100}%`}}
                             ></div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{alert.user}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{alert.user}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(alert.timestamp).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => handleAlertAction(alert.id, 'flag')}
-                          className="text-red-600 hover:text-red-900 mr-3"
-                        >
-                          Flag
-                        </button>
-                        <button
-                          onClick={() => handleAlertAction(alert.id, 'dismiss')}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          Dismiss
-                        </button>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex space-x-3">
+                          <button
+                            onClick={() => handleAlertAction(alert.id, 'flag')}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
+                          >
+                            Flag
+                          </button>
+                          <button
+                            onClick={() => handleAlertAction(alert.id, 'dismiss')}
+                            className="text-gray-500 hover:text-gray-700 text-sm font-medium transition-colors"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -625,21 +653,21 @@ const SOCDashboard = () => {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="px-6 py-3 border-t border-gray-200 flex justify-between items-center">
-              <div className="text-sm text-gray-700">
+              <div className="text-sm text-gray-600">
                 Page {currentPage} of {totalPages}
               </div>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50"
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-100 transition-colors"
                 >
                   Previous
                 </button>
                 <button
                   onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50"
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-100 transition-colors"
                 >
                   Next
                 </button>
