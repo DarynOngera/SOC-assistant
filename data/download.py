@@ -1,27 +1,42 @@
-import requests
+# data/clean.py
 import os
+import pandas as pd
 
-def download_file(url, folder_name):
-    if not os.path.exists(folder_name):
-        os.makedirs(folder_name)
-    local_filename = os.path.join(folder_name, url.split('/')[-1])
-    print(f"Downloading {url} to {local_filename}")
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        with open(local_filename, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-    return local_filename
+class DataCleaner:
+    def __init__(self, input_filename="microsoft_incident_data.csv"):
+        # Get the absolute path to this script's directory
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Point to raw and processed subfolders
+        self.input_path = os.path.join(base_dir, "raw", input_filename)
+        self.output_path = os.path.join(base_dir, "processed", "microsoft_incident_data_cleaned.csv")
+        
+        # Will hold the DataFrame
+        self.df = None
 
-# URLs for the datasets
-cic_ids_2017_url = "http://205.174.165.80/CICDataset/CIC-IDS-2017/Dataset/MachineLearningCSV.zip"
-cert_insider_threat_url = "https://kilthub.cmu.edu/ndownloader/files/12841247"
+    def load_data(self):
+        if not os.path.exists(self.input_path):
+            raise FileNotFoundError(f"Dataset not found at {self.input_path}")
+        self.df = pd.read_csv(self.input_path)
+        print(f"✅ Loaded dataset with {self.df.shape[0]} rows, {self.df.shape[1]} columns")
 
+    def clean_data(self):
+        # Example cleaning steps
+        self.df.dropna(inplace=True)
+        self.df.drop_duplicates(inplace=True)
+        print(f"🧹 Cleaned dataset now has {self.df.shape[0]} rows")
 
-print("Downloading CIC-IDS 2017 dataset...")
-download_file(cic_ids_2017_url, "data/raw")
-print("CIC-IDS 2017 dataset downloaded successfully.")
+    def save_data(self):
+        os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
+        self.df.to_csv(self.output_path, index=False)
+        print(f"💾 Saved cleaned dataset to {self.output_path}")
 
-print("Downloading CERT Insider Threat dataset...")
-download_file(cert_insider_threat_url, "data/raw")
-print("CERT Insider Threat dataset downloaded successfully.")
+    def run_pipeline(self):
+        self.load_data()
+        self.clean_data()
+        self.save_data()
+
+if __name__ == "__main__":
+    cleaner = DataCleaner()
+    cleaner.run_pipeline()
+
