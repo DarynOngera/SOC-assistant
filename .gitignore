@@ -1,4 +1,6 @@
 /venv
 /data/raw/
 /data/processed/
-
+/auth/users.json
+/auth/keys.json
+.env
