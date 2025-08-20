@@ -275,6 +275,28 @@ def authenticate_user(username, password, auth_manager, filepath='users.json'):
     
     user = users[username]
     
+    # Handle legacy string format (old users.json format)
+    if isinstance(user, str):
+        # Legacy format: username -> plain password
+        if user == password:
+            # Convert to new format
+            hashed_password = auth_manager.hash_password(password)
+            users[username] = {
+                'password': hashed_password,
+                'created_at': datetime.utcnow().isoformat(),
+                'last_login': datetime.utcnow().isoformat(),
+                'active': True,
+                'role': 'viewer'
+            }
+            save_users(users, filepath)
+            return True, "Authentication successful"
+        else:
+            return False, "Invalid credentials"
+    
+    # Handle new dictionary format
+    if not isinstance(user, dict):
+        return False, "Invalid user data format"
+    
     # Check if user is active
     if not user.get('active', True):
         return False, "Account is disabled"
