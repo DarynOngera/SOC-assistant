@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Edit3, Trash2, Shield, Eye, EyeOff, Save, X } from 'lucide-react';
+// Use React from global scope instead of import
+const { useState, useEffect } = React;
+// Use Lucide icons from global scope
+const { Users, UserPlus, Edit3, Trash2, Shield, Eye, EyeOff, Save, X } = lucide;
 
 const AdminDashboard = ({ token, userRole, onLogout }) => {
   const [users, setUsers] = useState([]);
@@ -522,4 +524,5 @@ const AdminDashboard = ({ token, userRole, onLogout }) => {
   );
 };
 
-export default AdminDashboard;
+// Export AdminDashboard to global window object
+window.AdminDashboard = AdminDashboard;
