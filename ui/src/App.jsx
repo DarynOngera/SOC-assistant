@@ -1,14 +1,23 @@
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect } = React;
+
+// Import role-specific components
+const SuperAdminView = window.SuperAdminView;
+const AnalystView = window.AnalystView;
+const ViewerView = window.ViewerView;
 
 const SOCDashboard = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [user, setUser] = useState('');
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+  const [loading, setLoading] = useState(true); // Start with loading true
+  const [error, setError] = useState('');
+  const [currentView, setCurrentView] = useState('dashboard');
+  
+  // Alert management state
   const [alerts, setAlerts] = useState([]);
   const [stats, setStats] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [filters, setFilters] = useState({ severity: '', status: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -16,15 +25,15 @@ const SOCDashboard = () => {
   const [sortOrder, setSortOrder] = useState('desc');
   
   // Chart refs
-  const threatTrendRef = useRef(null);
-  const severityDistRef = useRef(null);
-  const anomalyScoreRef = useRef(null);
-  const threatTrendChart = useRef(null);
-  const severityChart = useRef(null);
-  const anomalyChart = useRef(null);
+  const threatTrendRef = React.useRef(null);
+  const severityDistRef = React.useRef(null);
+  const anomalyScoreRef = React.useRef(null);
+  const threatTrendChart = React.useRef(null);
+  const severityChart = React.useRef(null);
+  const anomalyChart = React.useRef(null);
 
   const API_BASE = 'http://localhost:5000/api';
-  const token = localStorage.getItem('token');
+  const [token, setToken] = useState(localStorage.getItem('token'));
 
   // NLP Insights mock data (will be replaced with real API)
   const [nlpInsights, setNlpInsights] = useState([
@@ -57,8 +66,17 @@ const SOCDashboard = () => {
     }
   ]);
 
+  // Check for existing session on component mount
   useEffect(() => {
-    if (isLoggedIn) {
+    const storedToken = localStorage.getItem('token');
+    if (storedToken) {
+      setToken(storedToken);
+      validateToken(storedToken);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isLoggedIn && token) {
       fetchAlerts();
       fetchStats();
       const interval = setInterval(() => {
@@ -67,7 +85,7 @@ const SOCDashboard = () => {
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [isLoggedIn, filters, currentPage, sortBy, sortOrder]);
+  }, [isLoggedIn, filters, currentPage, sortBy, sortOrder, token]);
 
   useEffect(() => {
     if (isLoggedIn && stats.total_alerts) {
@@ -241,10 +259,92 @@ const SOCDashboard = () => {
     }
   };
 
+  // Token validation function
+  const validateToken = async (tokenToValidate) => {
+    console.log('Validating token:', tokenToValidate ? 'Token exists' : 'No token');
+    console.log('Token value:', tokenToValidate);
+    
+    if (!tokenToValidate) {
+      console.log('No token to validate');
+      setLoading(false);
+      return false;
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE}/validate-token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${tokenToValidate}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('Token validation response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Token validation successful:', data);
+        
+        // Handle backend response format: {valid: true, user: "username", role: "role"}
+        const userData = {
+          username: data.user,
+          role: data.role
+        };
+        
+        setUser(userData);
+        setUserRole(data.role);
+        setIsLoggedIn(true);
+        setLoading(false);
+        return true;
+      } else {
+        const errorData = await response.text();
+        console.error('Token validation failed:', response.status, errorData);
+        console.error('Full response:', response);
+        
+        // Clear invalid token and force re-login
+        localStorage.removeItem('token');
+        setToken(null);
+        setIsLoggedIn(false);
+        setUser(null);
+        setUserRole(null);
+        setLoading(false);
+        return false;
+      }
+    } catch (error) {
+      console.error('Token validation network error:', error);
+      localStorage.removeItem('token');
+      setToken(null);
+      setIsLoggedIn(false);
+      setUser(null);
+      setUserRole(null);
+      setLoading(false);
+      return false;
+    }
+  };
+
+  // Check for existing token on component mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    if (storedToken) {
+      setToken(storedToken);
+      validateToken(storedToken);
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch alerts when user is logged in
+  useEffect(() => {
+    if (isLoggedIn && token) {
+      fetchAlerts();
+      fetchStats();
+    }
+  }, [isLoggedIn, token, currentPage, filters, sortBy, sortOrder]);
+
   const fetchAlerts = async () => {
     if (!token) return;
     
-    setLoading(true);
     try {
       const params = new URLSearchParams({
         limit: '10',
@@ -263,6 +363,8 @@ const SOCDashboard = () => {
         setAlerts(data.alerts || data);
         setTotalPages(Math.ceil((data.total || data.length) / 10));
         setError('');
+      } else if (response.status === 401) {
+        handleLogout();
       }
     } catch (err) {
       setError('Failed to fetch alerts');
@@ -282,6 +384,8 @@ const SOCDashboard = () => {
       if (response.ok) {
         const data = await response.json();
         setStats(data);
+      } else if (response.status === 401) {
+        handleLogout();
       }
     } catch (err) {
       console.error('Failed to fetch stats:', err);
@@ -302,11 +406,15 @@ const SOCDashboard = () => {
 
       if (response.ok) {
         const data = await response.json();
-        localStorage.setItem('token', data.token);
-        setUser(data.user || username);
+        localStorage.setItem('token', data.access_token);
+        setToken(data.access_token);
+        setUser(data.user);
         setIsLoggedIn(true);
+        setUsername('');
+        setPassword('');
       } else {
-        setError('Invalid credentials');
+        const errorData = await response.json();
+        setError(errorData.message || 'Invalid credentials');
       }
     } catch (err) {
       setError('Login failed');
@@ -315,12 +423,25 @@ const SOCDashboard = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setIsLoggedIn(false);
-    setUser('');
-    setAlerts([]);
-    setStats({});
+  const handleLogout = async () => {
+    try {
+      if (token) {
+        await fetch(`${API_BASE}/logout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      localStorage.removeItem('token');
+      setToken(null);
+      setIsLoggedIn(false);
+      setUser(null);
+      setAlerts([]);
+      setStats({});
+      setCurrentView('dashboard');
+    }
   };
 
   const handleAlertAction = async (alertId, action) => {
@@ -354,12 +475,24 @@ const SOCDashboard = () => {
 
   const getInsightIcon = (type) => {
     switch (type) {
-      case 'threat_intelligence': return '🎯';
-      case 'behavioral_anomaly': return '⚠️';
-      case 'vulnerability_correlation': return '🔍';
-      default: return '💡';
+      case 'threat_intelligence': return 'TI';
+      case 'behavioral_anomaly': return 'BA';
+      case 'vulnerability_correlation': return 'VC';
+      default: return 'AI';
     }
   };
+
+  // Show loading spinner while validating token
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return (
@@ -411,6 +544,59 @@ const SOCDashboard = () => {
     );
   }
 
+  // Role-based dashboard rendering
+  const renderDashboard = () => {
+    if (currentView === 'admin' && user?.role === 'super_admin') {
+      return React.createElement(SuperAdminView, {
+        user: user,
+        token: token,
+        onLogout: handleLogout
+      });
+    }
+
+    switch (user?.role) {
+      case 'super_admin':
+        return React.createElement(SuperAdminView, {
+          user: user,
+          token: token,
+          alerts: alerts,
+          stats: stats,
+          onAlertAction: handleAlertAction,
+          onRefresh: () => {
+            fetchAlerts();
+            fetchStats();
+          }
+        });
+      case 'analyst':
+        return React.createElement(AnalystView, {
+          user: user,
+          token: token,
+          alerts: alerts,
+          stats: stats,
+          onAlertAction: handleAlertAction,
+          onRefresh: () => {
+            fetchAlerts();
+            fetchStats();
+          }
+        });
+      case 'viewer':
+        return React.createElement(ViewerView, {
+          user: user,
+          token: token,
+          alerts: alerts,
+          stats: stats,
+          onRefresh: () => {
+            fetchAlerts();
+            fetchStats();
+          }
+        });
+      default:
+        return React.createElement('div', { className: 'text-center py-8' },
+          React.createElement('p', { className: 'text-gray-600' }, 'Unknown role. Please contact administrator.')
+        );
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -425,7 +611,15 @@ const SOCDashboard = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">{user}</span>
+              <span className="text-sm text-gray-600">{user?.username || user}</span>
+              {user?.role === 'super_admin' && (
+                <button
+                  onClick={() => setCurrentView(currentView === 'admin' ? 'dashboard' : 'admin')}
+                  className="text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium"
+                >
+                  {currentView === 'admin' ? 'Dashboard' : 'Admin Panel'}
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
@@ -438,246 +632,12 @@ const SOCDashboard = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="card p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Alerts</p>
-                <p className="text-2xl font-semibold text-gray-800 mt-1">{stats.total_alerts || 0}</p>
-              </div>
-              <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
-                <span className="text-red-600 text-sm">🚨</span>
-              </div>
-            </div>
-          </div>
-          
-          <div className="card p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Critical</p>
-                <p className="text-2xl font-semibold text-red-600 mt-1">{stats.critical_alerts || 0}</p>
-              </div>
-              <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
-                <span className="text-orange-600 text-sm">⚡</span>
-              </div>
-            </div>
-          </div>
-          
-          <div className="card p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Avg Score</p>
-                <p className="text-2xl font-semibold text-blue-600 mt-1">{(stats.avg_anomaly_score || 0).toFixed(2)}</p>
-              </div>
-              <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
-                <span className="text-blue-600 text-sm">📊</span>
-              </div>
-            </div>
-          </div>
-          
-          <div className="card p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Processed</p>
-                <p className="text-2xl font-semibold text-green-600 mt-1">{stats.processed_sequences || 0}</p>
-              </div>
-              <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
-                <span className="text-green-600 text-sm">🔍</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="card p-6">
-            <div className="chart-container">
-              <canvas ref={threatTrendRef}></canvas>
-            </div>
-          </div>
-          
-          <div className="card p-6">
-            <div className="chart-container">
-              <canvas ref={severityDistRef}></canvas>
-            </div>
-          </div>
-          
-          <div className="card p-6">
-            <div className="chart-container">
-              <canvas ref={anomalyScoreRef}></canvas>
-            </div>
-          </div>
-        </div>
-
-        {/* NLP Insights Section */}
-        <div className="card mb-8">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-800 flex items-center">
-              <span className="text-lg mr-2">🧠</span>
-              AI Security Insights
-            </h2>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {nlpInsights.map((insight) => (
-                <div key={insight.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm">{getInsightIcon(insight.type)}</span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getSeverityColor(insight.severity)}`}>
-                        {insight.severity.toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {(insight.confidence * 100).toFixed(0)}%
-                    </div>
-                  </div>
-                  <h3 className="font-medium text-gray-800 mb-2 text-sm">{insight.title}</h3>
-                  <p className="text-xs text-gray-600 mb-3 leading-relaxed">{insight.description}</p>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">
-                      {new Date(insight.timestamp).toLocaleTimeString()}
-                    </span>
-                    <button className="text-blue-600 hover:text-blue-700 text-xs font-medium transition-colors">
-                      Investigate →
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Alerts Section */}
-        <div className="card">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-medium text-gray-800">Security Alerts</h2>
-              <div className="flex space-x-3">
-                <select
-                  value={filters.severity}
-                  onChange={(e) => setFilters({...filters, severity: e.target.value})}
-                  className="input-field bg-white px-3 py-1 text-sm focus:outline-none"
-                >
-                  <option value="">All Severities</option>
-                  <option value="critical">Critical</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-                
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="input-field bg-white px-3 py-1 text-sm focus:outline-none"
-                >
-                  <option value="timestamp">Time</option>
-                  <option value="severity">Severity</option>
-                  <option value="anomaly_score">Anomaly Score</option>
-                </select>
-              </div>
-            </div>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alert</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Severity</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Anomaly Score</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500 text-sm">Loading alerts...</td>
-                  </tr>
-                ) : alerts.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500 text-sm">No alerts found</td>
-                  </tr>
-                ) : (
-                  alerts.map((alert) => (
-                    <tr key={alert.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-800">{alert.alert}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full border ${getSeverityColor(alert.severity)}`}>
-                          {alert.severity}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <div className="text-sm text-gray-800">{alert.anomaly_score?.toFixed(2)}</div>
-                          <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                            <div 
-                              className="bg-blue-500 h-1.5 rounded-full transition-all" 
-                              style={{width: `${(alert.anomaly_score || 0) * 100}%`}}
-                            ></div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{alert.user}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(alert.timestamp).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex space-x-3">
-                          <button
-                            onClick={() => handleAlertAction(alert.id, 'flag')}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
-                          >
-                            Flag
-                          </button>
-                          <button
-                            onClick={() => handleAlertAction(alert.id, 'dismiss')}
-                            className="text-gray-500 hover:text-gray-700 text-sm font-medium transition-colors"
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="px-6 py-3 border-t border-gray-200 flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                Page {currentPage} of {totalPages}
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-100 transition-colors"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-100 transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        {renderDashboard()}
       </div>
     </div>
   );
 };
 
-ReactDOM.render(<SOCDashboard />, document.getElementById('root'));
+// Use React 18 createRoot API
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<SOCDashboard />);

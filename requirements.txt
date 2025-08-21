@@ -10,3 +10,6 @@ flask-cors==4.0.0
 python-dotenv==1.0.0
 pytest==7.4.0
 gunicorn==21.2.0
+bcrypt==4.0.1
+flask-limiter==3.3.1
+cryptography==41.0.3
