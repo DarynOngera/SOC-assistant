@@ -164,7 +164,7 @@ def validate_token():
                 algorithms=['HS256']
             )
             
-            username = payload['sub']
+            username = payload['user_id']
             session_id = payload.get('session_id')
             
             # Validate session
@@ -213,7 +213,7 @@ def refresh_token():
                 algorithms=['HS256']
             )
             
-            username = payload['sub']
+            username = payload['user_id']
             session_id = payload.get('session_id')
             
             # Validate session
@@ -667,25 +667,62 @@ def alert_action(current_user, alert_id):
     except Exception as e:
         return jsonify({'message': 'Internal server error'}), 500
 
+
 @app.route('/api/stats', methods=['GET'])
 @token_required(auth_manager)
-@require_permission(Permission.VIEW_ALERTS)
 def get_stats(current_user):
-    """Get dashboard statistics"""
+    """Get dashboard statistics for all users"""
     try:
+        # Load alerts data
+        alerts_file = 'output/processed_alerts.json'
+        alerts = []
+        if os.path.exists(alerts_file):
+            with open(alerts_file, 'r') as f:
+                alerts = json.load(f)
+        
+        # Calculate basic stats
+        total_alerts = len(alerts)
+        high_severity = len([a for a in alerts if a.get('severity') == 'High'])
+        medium_severity = len([a for a in alerts if a.get('severity') == 'Medium'])
+        low_severity = len([a for a in alerts if a.get('severity') == 'Low'])
+        
         stats = {
-            'total_alerts': 5,
-            'critical_alerts': 1,
-            'high_alerts': 3,
-            'medium_alerts': 1,
-            'low_alerts': 0,
-            'avg_anomaly_score': 0.81,
-            'processed_sequences': 1247
+            'totalAlerts': total_alerts,
+            'highSeverity': high_severity,
+            'mediumSeverity': medium_severity,
+            'lowSeverity': low_severity,
+            'resolved': len([a for a in alerts if a.get('status') == 'Resolved']),
+            'pending': len([a for a in alerts if a.get('status') == 'Pending']),
+            'investigating': len([a for a in alerts if a.get('status') == 'Investigating'])
         }
         return jsonify(stats)
-        
     except Exception as e:
-        return jsonify({'message': 'Internal server error'}), 500
+        print(f"Error in get_stats: {e}")
+        return jsonify({'message': 'Failed to fetch stats'}), 500
+
+@app.route('/api/admin/stats', methods=['GET'])
+@token_required(auth_manager)
+@require_role(rbac_manager, [Role.SUPER_ADMIN])
+def get_admin_stats(current_user):
+    """Get admin dashboard statistics"""
+    try:
+        # Load users to get count
+        users_file = os.path.join(os.path.dirname(__file__), '..', 'users.json')
+        with open(users_file, 'r') as f:
+            users = json.load(f)
+        
+        stats = {
+            'totalUsers': len(users),
+            'totalAlerts': 0,  # Placeholder - would connect to actual alert system
+            'systemHealth': 'Good',
+            'lastBackup': 'N/A'  # Placeholder - would connect to backup system
+        }
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Error in get_admin_stats: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': 'Failed to fetch stats'}), 500
 
 @app.route('/api/user/profile', methods=['GET'])
 @token_required(auth_manager)

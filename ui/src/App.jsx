@@ -261,23 +261,48 @@ const SOCDashboard = () => {
 
   // Token validation function
   const validateToken = async (tokenToValidate) => {
+    console.log('Validating token:', tokenToValidate ? 'Token exists' : 'No token');
+    console.log('Token value:', tokenToValidate);
+    
+    if (!tokenToValidate) {
+      console.log('No token to validate');
+      setLoading(false);
+      return false;
+    }
+    
     try {
       const response = await fetch(`${API_BASE}/validate-token`, {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${tokenToValidate}`,
           'Content-Type': 'application/json'
         }
       });
       
+      console.log('Token validation response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
       if (response.ok) {
         const data = await response.json();
-        setUser(data.user);
-        setUserRole(data.user.role);
+        console.log('Token validation successful:', data);
+        
+        // Handle backend response format: {valid: true, user: "username", role: "role"}
+        const userData = {
+          username: data.user,
+          role: data.role
+        };
+        
+        setUser(userData);
+        setUserRole(data.role);
         setIsLoggedIn(true);
         setLoading(false);
         return true;
       } else {
+        const errorData = await response.text();
+        console.error('Token validation failed:', response.status, errorData);
+        console.error('Full response:', response);
+        
+        // Clear invalid token and force re-login
         localStorage.removeItem('token');
         setToken(null);
         setIsLoggedIn(false);
@@ -287,7 +312,7 @@ const SOCDashboard = () => {
         return false;
       }
     } catch (error) {
-      console.error('Token validation error:', error);
+      console.error('Token validation network error:', error);
       localStorage.removeItem('token');
       setToken(null);
       setIsLoggedIn(false);
@@ -525,7 +550,7 @@ const SOCDashboard = () => {
       return React.createElement(SuperAdminView, {
         user: user,
         token: token,
-        onBack: () => setCurrentView('dashboard')
+        onLogout: handleLogout
       });
     }
 
