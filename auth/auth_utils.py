@@ -68,10 +68,14 @@ class AuthManager:
         """Generate access and refresh tokens"""
         now = datetime.utcnow()
         
+        # Generate session ID first
+        session_id = secrets.token_urlsafe(32)
+        
         # Access token
         access_payload = {
             'user_id': user_id,
             'type': 'access',
+            'session_id': session_id,  # Include session_id in token
             'iat': now,
             'exp': now + timedelta(seconds=self.app.config['JWT_ACCESS_TOKEN_EXPIRES']),
             'jti': secrets.token_urlsafe(16)  # JWT ID for token tracking
@@ -81,6 +85,7 @@ class AuthManager:
         refresh_payload = {
             'user_id': user_id,
             'type': 'refresh',
+            'session_id': session_id,  # Include session_id in token
             'iat': now,
             'exp': now + timedelta(seconds=self.app.config['JWT_REFRESH_TOKEN_EXPIRES']),
             'jti': secrets.token_urlsafe(16)
@@ -92,7 +97,6 @@ class AuthManager:
                                  algorithm='HS256')
         
         # Store session
-        session_id = secrets.token_urlsafe(32)
         self.active_sessions[session_id] = {
             'user_id': user_id,
             'access_token_jti': access_payload['jti'],
@@ -201,6 +205,39 @@ class AuthManager:
             self.revoke_token(refresh_token)
         
         return True
+    
+    def validate_session(self, user_id, session_id):
+        """Validate if session is active and valid"""
+        if not session_id:
+            return False
+            
+        # If session not found (server restart), create a new one for valid users
+        if session_id not in self.active_sessions:
+            # Check if user exists in system
+            try:
+                with open('users.json', 'r') as f:
+                    users = json.load(f)
+                    if user_id in users:
+                        # Recreate session for existing user
+                        self.active_sessions[session_id] = {
+                            'user_id': user_id,
+                            'access_token_jti': '',
+                            'refresh_token_jti': '',
+                            'created_at': datetime.utcnow(),
+                            'last_activity': datetime.utcnow()
+                        }
+                        return True
+            except Exception:
+                pass
+            return False
+        
+        session = self.active_sessions[session_id]
+        if session['user_id'] != user_id:
+            return False
+        
+        # Update last activity
+        session['last_activity'] = datetime.utcnow()
+        return True
 
 def token_required(auth_manager, optional=False):
     """Decorator for routes requiring authentication"""
@@ -274,6 +311,28 @@ def authenticate_user(username, password, auth_manager, filepath='users.json'):
         return False, "Invalid credentials"
     
     user = users[username]
+    
+    # Handle legacy string format (old users.json format)
+    if isinstance(user, str):
+        # Legacy format: username -> plain password
+        if user == password:
+            # Convert to new format
+            hashed_password = auth_manager.hash_password(password)
+            users[username] = {
+                'password': hashed_password,
+                'created_at': datetime.utcnow().isoformat(),
+                'last_login': datetime.utcnow().isoformat(),
+                'active': True,
+                'role': 'viewer'
+            }
+            save_users(users, filepath)
+            return True, "Authentication successful"
+        else:
+            return False, "Invalid credentials"
+    
+    # Handle new dictionary format
+    if not isinstance(user, dict):
+        return False, "Invalid user data format"
     
     # Check if user is active
     if not user.get('active', True):

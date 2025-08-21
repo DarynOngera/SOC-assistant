@@ -116,20 +116,21 @@ const SuperAdminView = ({ token, onLogout }) => {
       )
     ),
 
-    // User Manager
+    // User Manager - Full Admin Dashboard
     showUserManager && React.createElement('div', { className: 'bg-white rounded-lg shadow-lg' },
-      React.createElement('div', { className: 'p-4 border-b' },
-        React.createElement('h3', { className: 'text-lg font-semibold' }, 'User Management')
+      React.createElement('div', { className: 'p-4 border-b flex items-center justify-between' },
+        React.createElement('h3', { className: 'text-lg font-semibold' }, 'User Management'),
+        React.createElement('button', {
+          onClick: () => setShowUserManager(false),
+          className: 'text-gray-500 hover:text-gray-700 p-1'
+        }, '✕')
       ),
       React.createElement('div', { className: 'p-4' },
-        React.createElement('div', { className: 'text-center py-8' },
-          React.createElement('div', { className: 'text-6xl mb-4' }, ''),
-          React.createElement('p', { className: 'text-gray-600' }, 'User management interface will be integrated here'),
-          React.createElement('button', {
-            onClick: () => setShowUserManager(false),
-            className: 'mt-4 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded'
-          }, 'Close')
-        )
+        React.createElement(window.AdminDashboard, {
+          token: token,
+          userRole: 'super_admin',
+          onLogout: onLogout
+        })
       )
     ),
 

@@ -3,4 +3,6 @@
 /data/processed/
 /auth/users.json
 /auth/keys.json
+/auth/__pycache__
 .env
+/logs

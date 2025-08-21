@@ -4,6 +4,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os
 import json
+import jwt
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from auth_utils import AuthManager, token_required, authenticate_user, create_user, load_users, save_users
@@ -15,17 +16,21 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Initialize CORS with specific origins
-cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',')
-CORS(app, origins=cors_origins, supports_credentials=True)
+# Initialize CORS with permissive development settings
+CORS(app, 
+     origins=['http://localhost:5000', 'http://127.0.0.1:5000', 'http://localhost:3000'],
+     supports_credentials=True,
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     expose_headers=['Content-Type', 'Authorization'])
 
 # Initialize rate limiter
 limiter = Limiter(
-    app,
     key_func=get_remote_address,
     default_limits=[os.environ.get('DEFAULT_RATE_LIMIT', '100 per hour')],
     storage_uri=os.environ.get('RATE_LIMIT_STORAGE_URL', 'memory://')
 )
+limiter.init_app(app)
 
 # Configure Flask app
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')
@@ -46,14 +51,29 @@ def add_security_headers():
 
 @app.after_request
 def after_request(response):
-    """Add security headers after each request"""
+    """Add security headers and CORS headers after each request"""
+    # Security headers
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; connect-src 'self' http://localhost:5000 http://127.0.0.1:5000; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:;"
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    
+    # Additional CORS headers for preflight requests
+    origin = request.headers.get('Origin')
+    if origin in ['http://localhost:5000', 'http://127.0.0.1:5000', 'http://localhost:3000']:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    
     return response
+
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    """Handle preflight OPTIONS requests"""
+    return '', 200
 
 @app.route('/api/login', methods=['POST'])
 @limiter.limit("5 per minute")
@@ -125,29 +145,100 @@ def login():
         })
         return jsonify({'message': 'Internal server error'}), 500
 
+@app.route('/api/validate-token', methods=['POST'])
+@limiter.limit("20 per minute")
+def validate_token():
+    """Validate access token and return user info"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'message': 'Token required'}), 401
+        
+        token = auth_header.split(' ')[1]
+        
+        try:
+            # Decode token
+            payload = jwt.decode(
+                token, 
+                app.config['JWT_SECRET_KEY'], 
+                algorithms=['HS256']
+            )
+            
+            username = payload['user_id']
+            session_id = payload.get('session_id')
+            
+            # Validate session
+            if not auth_manager.validate_session(username, session_id):
+                return jsonify({'message': 'Invalid session'}), 401
+            
+            # Get user role
+            user_role = rbac_manager.get_user_role(username)
+            
+            return jsonify({
+                'valid': True,
+                'user': username,
+                'role': user_role.value if user_role else 'viewer',
+                'session_id': session_id
+            })
+            
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Invalid token'}), 401
+            
+    except Exception as e:
+        log_security_event('token_validation_error', {
+            'error': str(e),
+            'ip': auth_manager.get_client_ip(request),
+            'timestamp': datetime.utcnow().isoformat()
+        })
+        return jsonify({'message': 'Internal server error'}), 500
+
 @app.route('/api/refresh', methods=['POST'])
 @limiter.limit("10 per minute")
 def refresh_token():
     """Refresh access token using refresh token"""
     try:
         data = request.get_json()
-        if not data or 'refresh_token' not in data:
-            return jsonify({'message': 'Refresh token is required'}), 400
+        refresh_token = data.get('refresh_token')
         
-        refresh_token = data['refresh_token']
+        if not refresh_token:
+            return jsonify({'message': 'Refresh token required'}), 400
         
-        # Generate new access token
-        new_access_token, user_id, error = auth_manager.refresh_access_token(refresh_token)
-        
-        if error:
-            return jsonify({'message': error}), 401
-        
-        return jsonify({
-            'access_token': new_access_token,
-            'expires_in': app.config['JWT_ACCESS_TOKEN_EXPIRES']
-        })
-        
+        try:
+            # Decode refresh token
+            payload = jwt.decode(
+                refresh_token, 
+                app.config['JWT_SECRET_KEY'], 
+                algorithms=['HS256']
+            )
+            
+            username = payload['user_id']
+            session_id = payload.get('session_id')
+            
+            # Validate session
+            if not auth_manager.validate_session(username, session_id):
+                return jsonify({'message': 'Invalid session'}), 401
+            
+            # Generate new access token
+            access_token = auth_manager.generate_access_token(username, session_id)
+            
+            return jsonify({
+                'access_token': access_token,
+                'expires_in': app.config['JWT_ACCESS_TOKEN_EXPIRES']
+            })
+            
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Refresh token expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Invalid refresh token'}), 401
+            
     except Exception as e:
+        log_security_event('token_refresh_error', {
+            'error': str(e),
+            'ip': auth_manager.get_client_ip(request),
+            'timestamp': datetime.utcnow().isoformat()
+        })
         return jsonify({'message': 'Internal server error'}), 500
 
 @app.route('/api/logout', methods=['POST'])
@@ -447,6 +538,192 @@ def get_roles(current_user):
     except Exception as e:
         return jsonify({'message': 'Internal server error'}), 500
 
+@app.route('/api/alerts', methods=['GET'])
+@token_required(auth_manager)
+@require_permission(Permission.VIEW_ALERTS)
+def get_alerts(current_user):
+    """Get security alerts with filtering and sorting"""
+    try:
+        # Sample alerts with anomaly scores and enhanced data
+        sample_alerts = [
+            {
+                'id': 1,
+                'timestamp': '2025-08-20 23:30:00',
+                'alert': 'Suspicious login attempt from 192.168.1.100',
+                'severity': 'high',
+                'anomaly_score': 0.85,
+                'source_ip': '192.168.1.100',
+                'user': 'admin',
+                'status': 'active'
+            },
+            {
+                'id': 2,
+                'timestamp': '2025-08-20 23:25:00',
+                'alert': 'Malware detected on host server-01',
+                'severity': 'critical',
+                'anomaly_score': 0.95,
+                'source_ip': '10.0.1.50',
+                'user': 'system',
+                'status': 'active'
+            },
+            {
+                'id': 3,
+                'timestamp': '2025-08-20 23:20:00',
+                'alert': 'Data exfiltration attempt from internal network',
+                'severity': 'high',
+                'anomaly_score': 0.78,
+                'source_ip': '192.168.2.45',
+                'user': 'john.doe',
+                'status': 'active'
+            },
+            {
+                'id': 4,
+                'timestamp': '2025-08-20 23:15:00',
+                'alert': 'Multiple failed login attempts for user "admin"',
+                'severity': 'medium',
+                'anomaly_score': 0.65,
+                'source_ip': '203.0.113.10',
+                'user': 'admin',
+                'status': 'active'
+            },
+            {
+                'id': 5,
+                'timestamp': '2025-08-20 23:10:00',
+                'alert': 'Denial of service attack detected on web server',
+                'severity': 'high',
+                'anomaly_score': 0.82,
+                'source_ip': '198.51.100.25',
+                'user': 'unknown',
+                'status': 'active'
+            }
+        ]
+        
+        # Apply filters
+        severity_filter = request.args.get('severity', '').lower()
+        if severity_filter:
+            sample_alerts = [alert for alert in sample_alerts if alert['severity'] == severity_filter]
+        
+        # Apply sorting
+        sort_by = request.args.get('sort_by', 'timestamp')
+        sort_order = request.args.get('sort_order', 'desc')
+        
+        if sort_by == 'anomaly_score':
+            sample_alerts.sort(key=lambda x: x['anomaly_score'], reverse=(sort_order == 'desc'))
+        elif sort_by == 'severity':
+            severity_order = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
+            sample_alerts.sort(key=lambda x: severity_order.get(x['severity'], 0), reverse=(sort_order == 'desc'))
+        else:
+            sample_alerts.sort(key=lambda x: x['timestamp'], reverse=(sort_order == 'desc'))
+        
+        # Apply pagination
+        limit = int(request.args.get('limit', 10))
+        offset = int(request.args.get('offset', 0))
+        paginated_alerts = sample_alerts[offset:offset + limit]
+        
+        return jsonify({
+            'alerts': paginated_alerts,
+            'total': len(sample_alerts),
+            'limit': limit,
+            'offset': offset
+        })
+        
+    except Exception as e:
+        return jsonify({'message': 'Internal server error'}), 500
+
+@app.route('/api/alerts/<int:alert_id>/action', methods=['POST'])
+@token_required(auth_manager)
+@require_permission(Permission.MANAGE_ALERTS)
+def alert_action(current_user, alert_id):
+    """Handle alert actions (flag/dismiss)"""
+    try:
+        data = request.get_json()
+        action = data.get('action')  # 'flag' or 'dismiss'
+        
+        # Log the action for future retraining
+        log_entry = {
+            'user': current_user,
+            'alert_id': alert_id,
+            'action': action,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        # Ensure logs directory exists
+        os.makedirs('logs', exist_ok=True)
+        
+        # Append to feedback log
+        try:
+            with open('logs/feedback.json', 'r') as f:
+                feedback_logs = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            feedback_logs = []
+        
+        feedback_logs.append(log_entry)
+        
+        with open('logs/feedback.json', 'w') as f:
+            json.dump(feedback_logs, f, indent=2)
+        
+        return jsonify({'message': f'Alert {alert_id} {action}ed successfully'})
+        
+    except Exception as e:
+        return jsonify({'message': 'Internal server error'}), 500
+
+
+@app.route('/api/stats', methods=['GET'])
+@token_required(auth_manager)
+def get_stats(current_user):
+    """Get dashboard statistics for all users"""
+    try:
+        # Load alerts data
+        alerts_file = 'output/processed_alerts.json'
+        alerts = []
+        if os.path.exists(alerts_file):
+            with open(alerts_file, 'r') as f:
+                alerts = json.load(f)
+        
+        # Calculate basic stats
+        total_alerts = len(alerts)
+        high_severity = len([a for a in alerts if a.get('severity') == 'High'])
+        medium_severity = len([a for a in alerts if a.get('severity') == 'Medium'])
+        low_severity = len([a for a in alerts if a.get('severity') == 'Low'])
+        
+        stats = {
+            'totalAlerts': total_alerts,
+            'highSeverity': high_severity,
+            'mediumSeverity': medium_severity,
+            'lowSeverity': low_severity,
+            'resolved': len([a for a in alerts if a.get('status') == 'Resolved']),
+            'pending': len([a for a in alerts if a.get('status') == 'Pending']),
+            'investigating': len([a for a in alerts if a.get('status') == 'Investigating'])
+        }
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Error in get_stats: {e}")
+        return jsonify({'message': 'Failed to fetch stats'}), 500
+
+@app.route('/api/admin/stats', methods=['GET'])
+@token_required(auth_manager)
+@require_role(rbac_manager, [Role.SUPER_ADMIN])
+def get_admin_stats(current_user):
+    """Get admin dashboard statistics"""
+    try:
+        # Load users to get count
+        users_file = os.path.join(os.path.dirname(__file__), '..', 'users.json')
+        with open(users_file, 'r') as f:
+            users = json.load(f)
+        
+        stats = {
+            'totalUsers': len(users),
+            'totalAlerts': 0,  # Placeholder - would connect to actual alert system
+            'systemHealth': 'Good',
+            'lastBackup': 'N/A'  # Placeholder - would connect to backup system
+        }
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Error in get_admin_stats: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': 'Failed to fetch stats'}), 500
+
 @app.route('/api/user/profile', methods=['GET'])
 @token_required(auth_manager)
 def get_user_profile(current_user):
@@ -483,159 +760,14 @@ def get_user_profile(current_user):
     except Exception as e:
         return jsonify({'message': 'Internal server error'}), 500
 
-@app.route('/api/alerts', methods=['GET'])
-@token_required(auth_manager)
-@require_permission(Permission.VIEW_ALERTS)
-def get_alerts(current_user):
-    """Get security alerts for authenticated user"""
-    try:
-        # Sample alerts with anomaly scores and enhanced data
-        sample_alerts = [
-            {
-                'id': 1,
-                'timestamp': '2025-08-20 12:30:00',
-                'alert': 'Suspicious login attempt from 192.168.1.100',
-                'severity': 'High',
-                'anomaly_score': 0.85,
-                'source_ip': '192.168.1.100',
-                'user': 'admin',
-                'status': 'active'
-            },
-            {
-                'id': 2,
-                'timestamp': '2025-08-20 12:25:00',
-                'alert': 'Malware detected on host server-01',
-                'severity': 'Critical',
-                'anomaly_score': 0.95,
-                'source_ip': '10.0.1.50',
-                'user': 'system',
-                'status': 'active'
-            },
-            {
-                'id': 3,
-                'timestamp': '2025-08-20 12:20:00',
-                'alert': 'Data exfiltration attempt from internal network',
-                'severity': 'High',
-                'anomaly_score': 0.78,
-                'source_ip': '192.168.2.45',
-                'user': 'john.doe',
-                'status': 'active'
-            },
-            {
-                'id': 4,
-                'timestamp': '2025-08-20 12:15:00',
-                'alert': 'Multiple failed login attempts for user "admin"',
-                'severity': 'Medium',
-                'anomaly_score': 0.65,
-                'source_ip': '203.0.113.10',
-                'user': 'admin',
-                'status': 'active'
-            },
-            {
-                'id': 5,
-                'timestamp': '2025-08-20 12:10:00',
-                'alert': 'Denial of service attack detected on web server',
-                'severity': 'High',
-                'anomaly_score': 0.82,
-                'source_ip': '198.51.100.25',
-                'user': 'unknown',
-                'status': 'active'
-            }
-        ]
-        
-        # Sort by anomaly score (highest first)
-        sorted_alerts = sorted(sample_alerts, key=lambda x: x['anomaly_score'], reverse=True)
-        return jsonify(sorted_alerts)
-        
-    except Exception as e:
-        return jsonify({'message': 'Internal server error'}), 500
 
-@app.route('/api/alerts/<int:alert_id>/action', methods=['POST'])
-@token_required(auth_manager)
-@require_permission(Permission.FLAG_ALERTS)
-def alert_action(current_user, alert_id):
-    """Handle alert actions (flag/dismiss)"""
-    try:
-        data = request.get_json()
-        if not data or 'action' not in data:
-            return jsonify({'message': 'Action is required'}), 400
-        
-        action = data.get('action')
-        if action not in ['flag', 'dismiss']:
-            return jsonify({'message': 'Invalid action'}), 400
-        
-        # Check if user has permission for dismiss action
-        if action == 'dismiss':
-            user_role = rbac_manager.get_user_role(current_user)
-            if not rbac_manager.has_permission(user_role, Permission.DISMISS_ALERTS):
-                return jsonify({'message': 'Insufficient permissions to dismiss alerts'}), 403
-        
-        # Log the action for future retraining
-        log_entry = {
-            'user': current_user,
-            'alert_id': alert_id,
-            'action': action,
-            'timestamp': datetime.utcnow().isoformat(),
-            'ip': auth_manager.get_client_ip(request)
-        }
-        
-        # Ensure logs directory exists
-        os.makedirs('../logs', exist_ok=True)
-        
-        # Append to feedback log
-        try:
-            with open('../logs/feedback.json', 'r') as f:
-                feedback_logs = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            feedback_logs = []
-        
-        feedback_logs.append(log_entry)
-        
-        with open('../logs/feedback.json', 'w') as f:
-            json.dump(feedback_logs, f, indent=2)
-        
-        return jsonify({'message': f'Alert {alert_id} {action}ed successfully'})
-        
-    except Exception as e:
-        return jsonify({'message': 'Internal server error'}), 500
-
-@app.route('/api/stats', methods=['GET'])
-@token_required(auth_manager)
-@require_permission(Permission.VIEW_STATISTICS)
-def get_stats(current_user):
-    """Get security statistics"""
-    try:
-        stats = {
-            'total_alerts': 5,
-            'high_severity': 3,
-            'medium_severity': 1,
-            'critical_severity': 1,
-            'avg_anomaly_score': 0.81,
-            'active_sessions': len(auth_manager.active_sessions),
-            'failed_attempts_today': len([
-                attempt for attempts in auth_manager.failed_attempts.values()
-                for attempt in attempts
-                if attempt > datetime.utcnow() - timedelta(days=1)
-            ])
-        }
-        
-        # Add admin-only stats
-        user_role = rbac_manager.get_user_role(current_user)
-        if rbac_manager.has_permission(user_role, Permission.VIEW_USERS):
-            users = load_users('users.json')
-            stats['total_users'] = len(users)
-            stats['active_users'] = sum(1 for user in users.values() 
-                                      if isinstance(user, dict) and user.get('active', True))
-        
-        return jsonify(stats)
-        
-    except Exception as e:
-        return jsonify({'message': 'Internal server error'}), 500
 
 def log_security_event(event_type, data):
     """Log security events for monitoring"""
     try:
-        os.makedirs('../logs', exist_ok=True)
+        # Use absolute path for logs directory
+        logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+        os.makedirs(logs_dir, exist_ok=True)
         
         log_entry = {
             'event_type': event_type,
@@ -643,9 +775,11 @@ def log_security_event(event_type, data):
             **data
         }
         
+        log_file = os.path.join(logs_dir, 'security.json')
+        
         # Append to security log
         try:
-            with open('../logs/security.json', 'r') as f:
+            with open(log_file, 'r') as f:
                 security_logs = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             security_logs = []
@@ -656,7 +790,7 @@ def log_security_event(event_type, data):
         if len(security_logs) > 1000:
             security_logs = security_logs[-1000:]
         
-        with open('../logs/security.json', 'w') as f:
+        with open(log_file, 'w') as f:
             json.dump(security_logs, f, indent=2)
             
     except Exception as e:
