@@ -1,6 +1,0 @@
-# requirements.txt
-flask==2.0.1
-pyjwt==2.4.0
-pandas==2.0.3
-numpy==2.0.0
-werkzeug==2.0.3
