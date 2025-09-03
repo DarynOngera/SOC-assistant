@@ -1,0 +1,629 @@
+#!/usr/bin/env python3
+"""
+SOC Anomaly Detection - Supervised Learning Approach
+Enhanced pipeline with Random Forest, XGBoost, and ensemble methods
+"""
+
+import os
+import glob
+import warnings
+import numpy as np
+import pandas as pd
+import joblib
+from datetime import datetime
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Supervised Learning Models
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.metrics import (classification_report, confusion_matrix, roc_auc_score, 
+                           roc_curve, precision_recall_curve, f1_score, accuracy_score)
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
+
+# Advanced Models
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    XGBOOST_AVAILABLE = False
+    print("XGBoost not available. Install with: pip install xgboost")
+
+# Class Imbalance Handling
+try:
+    from imblearn.over_sampling import SMOTE, ADASYN
+    from imblearn.combine import SMOTETomek
+    IMBALANCED_AVAILABLE = True
+except ImportError:
+    IMBALANCED_AVAILABLE = False
+    print("Imbalanced-learn not available. Install with: pip install imbalanced-learn")
+
+# Suppress warnings
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+class SupervisedSOCDetector:
+    """
+    Advanced supervised learning pipeline for SOC anomaly detection
+    """
+    
+    def __init__(self, random_state=42):
+        self.random_state = random_state
+        self.scaler = StandardScaler()
+        self.label_encoder = LabelEncoder()
+        self.feature_selector = None
+        self.models = {}
+        self.ensemble_model = None
+        self.feature_columns = None
+        self.feature_importance = None
+        
+    def load_csv_files(self, data_path, sample_size=None, max_file_size_mb=100):
+        """
+        Memory-efficient CSV loading with chunked reading for large files
+        """
+        print(f"Loading data from: {data_path}")
+        
+        if os.path.isfile(data_path):
+            csv_files = [data_path]
+        else:
+            csv_files = glob.glob(os.path.join(data_path, "*.csv"))
+            
+        if not csv_files:
+            raise ValueError(f"No CSV files found in {data_path}")
+            
+        print(f"Found {len(csv_files)} CSV file(s)")
+        dataframes = []
+        
+        for i, file_path in enumerate(csv_files):
+            print(f"Loading file {i+1}/{len(csv_files)}: {os.path.basename(file_path)}")
+            
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+            
+            if file_size_mb > max_file_size_mb:
+                print(f"Large file detected ({file_size_mb:.1f}MB). Using chunked reading...")
+                chunks = []
+                chunk_size = 10000
+                
+                for chunk in pd.read_csv(file_path, chunksize=chunk_size):
+                    chunks.append(chunk)
+                    if sample_size and len(pd.concat(chunks)) >= sample_size:
+                        break
+                        
+                df = pd.concat(chunks, ignore_index=True)
+            else:
+                df = pd.read_csv(file_path)
+                
+            if sample_size and len(df) > sample_size:
+                df = df.sample(n=sample_size, random_state=self.random_state)
+                print(f"Sampled {sample_size} rows from {len(df)} total")
+                
+            dataframes.append(df)
+            
+        combined_df = pd.concat(dataframes, ignore_index=True)
+        print(f"Combined dataset shape: {combined_df.shape}")
+        
+        # Memory cleanup
+        del dataframes
+        
+        return combined_df
+    
+    def preprocess_data(self, df, fit_encoders=True):
+        """
+        Advanced preprocessing with feature engineering
+        """
+        print("Preprocessing data...")
+        
+        # Handle missing values
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        categorical_cols = df.select_dtypes(include=['object']).columns
+        
+        # Fill missing values
+        df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
+        df[categorical_cols] = df[categorical_cols].fillna(df[categorical_cols].mode().iloc[0] if not df[categorical_cols].mode().empty else 'unknown')
+        
+        # Encode categorical variables
+        for col in categorical_cols:
+            if col not in ['Label', 'attack_cat']:  # Preserve target variables
+                if fit_encoders:
+                    df[col] = self.label_encoder.fit_transform(df[col].astype(str))
+                else:
+                    # Handle unseen categories
+                    unique_vals = set(df[col].unique())
+                    known_vals = set(self.label_encoder.classes_)
+                    unknown_vals = unique_vals - known_vals
+                    
+                    if unknown_vals:
+                        print(f"Unknown categories in {col}: {unknown_vals}")
+                        df[col] = df[col].replace(list(unknown_vals), 'unknown')
+                    
+                    df[col] = self.label_encoder.transform(df[col].astype(str))
+        
+        return df
+    
+    def extract_features_and_labels(self, df, fit_scaler=True):
+        """
+        Extract features and labels with advanced feature engineering
+        """
+        print(f"Dataset columns: {list(df.columns)}")
+        print(f"Dataset shape: {df.shape}")
+        
+        # Handle different dataset formats
+        if 'id' in df.columns and 'label' in df.columns:
+            # Format 1: train.csv and test.csv with headers
+            exclude_cols = ['id', 'Label', 'label', 'attack_cat', 'timestamp', 'Timestamp']
+            label_col = 'label'
+        elif len(df.columns) > 40 and df.iloc[:, -1].dtype in [int, float]:
+            # Format 2: train1.csv etc without headers, last column is label
+            print("Detected headerless format, using last column as label")
+            # Create column names
+            feature_names = [f'feature_{i}' for i in range(len(df.columns)-1)]
+            df.columns = feature_names + ['label']
+            exclude_cols = ['Label', 'label', 'attack_cat', 'timestamp', 'Timestamp']
+            label_col = 'label'
+        else:
+            raise ValueError(f"Unrecognized dataset format. Columns: {list(df.columns)}")
+        
+        # Extract feature columns
+        feature_cols = [col for col in df.columns if col not in exclude_cols]
+        
+        if fit_scaler:
+            self.feature_columns = feature_cols
+            
+        # Extract features
+        X = df[self.feature_columns].copy()
+        
+        # Extract labels
+        y = df[label_col].copy()
+        
+        # Convert to binary if needed
+        if y.dtype == 'object':
+            y = (y != 'BENIGN').astype(int)  # Assuming BENIGN is normal
+        else:
+            y = (y != 0).astype(int)  # Assuming 0 is normal
+        
+        # Scale features
+        if fit_scaler:
+            X_scaled = self.scaler.fit_transform(X)
+        else:
+            X_scaled = self.scaler.transform(X)
+            
+        print(f"Features shape: {X_scaled.shape}")
+        print(f"Labels distribution: Normal={np.sum(y==0)}, Attack={np.sum(y==1)}")
+        
+        return X_scaled, y
+    
+    def feature_selection(self, X, y, k=50):
+        """
+        Advanced feature selection using multiple methods
+        """
+        print(f"Performing feature selection (selecting top {k} features)...")
+        
+        # Use mutual information for feature selection
+        self.feature_selector = SelectKBest(score_func=mutual_info_classif, k=min(k, X.shape[1]))
+        X_selected = self.feature_selector.fit_transform(X, y)
+        
+        # Get feature importance scores
+        feature_scores = self.feature_selector.scores_
+        selected_features = self.feature_selector.get_support()
+        
+        print(f"Selected {X_selected.shape[1]} features from {X.shape[1]} total")
+        
+        return X_selected
+    
+    def handle_class_imbalance(self, X, y, method='smote'):
+        """
+        Handle class imbalance using various techniques
+        """
+        if not IMBALANCED_AVAILABLE:
+            print("Imbalanced-learn not available. Skipping class balancing.")
+            return X, y
+            
+        print(f"Handling class imbalance using {method}...")
+        original_counts = np.bincount(y)
+        print(f"Original class distribution: Normal={original_counts[0]}, Attack={original_counts[1]}")
+        
+        if method == 'smote':
+            sampler = SMOTE(random_state=self.random_state)
+        elif method == 'adasyn':
+            sampler = ADASYN(random_state=self.random_state)
+        elif method == 'smote_tomek':
+            sampler = SMOTETomek(random_state=self.random_state)
+        else:
+            print(f"Unknown method {method}. Using SMOTE.")
+            sampler = SMOTE(random_state=self.random_state)
+            
+        try:
+            X_resampled, y_resampled = sampler.fit_resample(X, y)
+            new_counts = np.bincount(y_resampled)
+            print(f"Resampled class distribution: Normal={new_counts[0]}, Attack={new_counts[1]}")
+            return X_resampled, y_resampled
+        except Exception as e:
+            print(f"Error in resampling: {e}. Using original data.")
+            return X, y
+    
+    def build_models(self):
+        """
+        Build multiple supervised learning models
+        """
+        print("Building supervised learning models...")
+        
+        # Random Forest
+        self.models['random_forest'] = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
+            min_samples_split=5,
+            min_samples_leaf=2,
+            random_state=self.random_state,
+            n_jobs=-1
+        )
+        
+        # XGBoost (if available)
+        if XGBOOST_AVAILABLE:
+            self.models['xgboost'] = xgb.XGBClassifier(
+                n_estimators=100,
+                max_depth=6,
+                learning_rate=0.1,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=self.random_state,
+                n_jobs=-1,
+                eval_metric='logloss'
+            )
+        
+        print(f"Built {len(self.models)} models: {list(self.models.keys())}")
+    
+    def train_models(self, X_train, y_train, use_cv=True):
+        """
+        Train all models with cross-validation
+        """
+        print("Training models...")
+        
+        if use_cv:
+            cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.random_state)
+            
+        for name, model in self.models.items():
+            print(f"\nTraining {name}...")
+            
+            # Cross-validation
+            if use_cv:
+                cv_scores = cross_val_score(model, X_train, y_train, cv=cv, scoring='f1')
+                print(f"{name} CV F1 Score: {cv_scores.mean():.4f} (+/- {cv_scores.std() * 2:.4f})")
+            
+            # Fit model
+            model.fit(X_train, y_train)
+            
+            # Feature importance
+            if hasattr(model, 'feature_importances_'):
+                if self.feature_importance is None:
+                    self.feature_importance = {}
+                self.feature_importance[name] = model.feature_importances_
+    
+    def create_ensemble(self):
+        """
+        Create ensemble model from trained models
+        """
+        if len(self.models) < 2:
+            print("Need at least 2 models for ensemble. Using single model.")
+            return
+            
+        print("Creating ensemble model...")
+        
+        estimators = [(name, model) for name, model in self.models.items()]
+        self.ensemble_model = VotingClassifier(
+            estimators=estimators,
+            voting='soft'  # Use probability voting
+        )
+        
+        print(f"Ensemble created with {len(estimators)} models")
+    
+    def evaluate_models(self, X_test, y_test):
+        """
+        Comprehensive model evaluation
+        """
+        print("\n" + "="*60)
+        print("MODEL EVALUATION RESULTS")
+        print("="*60)
+        
+        results = {}
+        
+        # Evaluate individual models
+        for name, model in self.models.items():
+            print(f"\n{name.upper()} RESULTS:")
+            print("-" * 40)
+            
+            y_pred = model.predict(X_test)
+            y_pred_proba = model.predict_proba(X_test)[:, 1]
+            
+            # Calculate metrics
+            accuracy = accuracy_score(y_test, y_pred)
+            f1 = f1_score(y_test, y_pred)
+            auc = roc_auc_score(y_test, y_pred_proba)
+            
+            results[name] = {
+                'accuracy': accuracy,
+                'f1_score': f1,
+                'auc_score': auc,
+                'y_pred': y_pred,
+                'y_pred_proba': y_pred_proba
+            }
+            
+            print(f"Accuracy: {accuracy:.4f}")
+            print(f"F1 Score: {f1:.4f}")
+            print(f"AUC Score: {auc:.4f}")
+            
+            print("\nClassification Report:")
+            print(classification_report(y_test, y_pred, target_names=['Normal', 'Attack']))
+            
+            print("\nConfusion Matrix:")
+            cm = confusion_matrix(y_test, y_pred)
+            print(f"TN: {cm[0,0]}, FP: {cm[0,1]}")
+            print(f"FN: {cm[1,0]}, TP: {cm[1,1]}")
+        
+        # Evaluate ensemble if available
+        if self.ensemble_model is not None:
+            print(f"\nENSEMBLE RESULTS:")
+            print("-" * 40)
+            
+            # Fit ensemble on training data (assuming it's available)
+            # Note: In practice, you'd want to fit this during training
+            y_pred = self.ensemble_model.predict(X_test)
+            y_pred_proba = self.ensemble_model.predict_proba(X_test)[:, 1]
+            
+            accuracy = accuracy_score(y_test, y_pred)
+            f1 = f1_score(y_test, y_pred)
+            auc = roc_auc_score(y_test, y_pred_proba)
+            
+            results['ensemble'] = {
+                'accuracy': accuracy,
+                'f1_score': f1,
+                'auc_score': auc,
+                'y_pred': y_pred,
+                'y_pred_proba': y_pred_proba
+            }
+            
+            print(f"Accuracy: {accuracy:.4f}")
+            print(f"F1 Score: {f1:.4f}")
+            print(f"AUC Score: {auc:.4f}")
+            
+            print("\nClassification Report:")
+            print(classification_report(y_test, y_pred, target_names=['Normal', 'Attack']))
+        
+        return results
+    
+    def plot_results(self, results, y_test, save_dir='models'):
+        """
+        Create comprehensive visualization plots
+        """
+        print("Creating evaluation plots...")
+        
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # ROC Curves
+        plt.figure(figsize=(12, 8))
+        
+        plt.subplot(2, 2, 1)
+        for name, result in results.items():
+            fpr, tpr, _ = roc_curve(y_test, result['y_pred_proba'])
+            plt.plot(fpr, tpr, label=f"{name} (AUC={result['auc_score']:.3f})")
+        
+        plt.plot([0, 1], [0, 1], 'k--', label='Random')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('ROC Curves')
+        plt.legend()
+        plt.grid(True)
+        
+        # Precision-Recall Curves
+        plt.subplot(2, 2, 2)
+        for name, result in results.items():
+            precision, recall, _ = precision_recall_curve(y_test, result['y_pred_proba'])
+            plt.plot(recall, precision, label=f"{name} (F1={result['f1_score']:.3f})")
+        
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title('Precision-Recall Curves')
+        plt.legend()
+        plt.grid(True)
+        
+        # Feature Importance (if available)
+        if self.feature_importance:
+            plt.subplot(2, 2, 3)
+            for name, importance in self.feature_importance.items():
+                top_indices = np.argsort(importance)[-10:]  # Top 10 features
+                plt.barh(range(len(top_indices)), importance[top_indices], alpha=0.7, label=name)
+            
+            plt.xlabel('Feature Importance')
+            plt.title('Top 10 Feature Importances')
+            plt.legend()
+        
+        # Model Comparison
+        plt.subplot(2, 2, 4)
+        metrics = ['accuracy', 'f1_score', 'auc_score']
+        x = np.arange(len(metrics))
+        width = 0.35
+        
+        for i, (name, result) in enumerate(results.items()):
+            values = [result[metric] for metric in metrics]
+            plt.bar(x + i*width, values, width, label=name, alpha=0.8)
+        
+        plt.xlabel('Metrics')
+        plt.ylabel('Score')
+        plt.title('Model Performance Comparison')
+        plt.xticks(x + width/2, metrics)
+        plt.legend()
+        plt.ylim(0, 1)
+        
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/supervised_evaluation_{timestamp}.png", dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Plots saved to {save_dir}/supervised_evaluation_{timestamp}.png")
+    
+    def save_models(self, save_dir='models'):
+        """
+        Save all trained models and components
+        """
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Save individual models
+        for name, model in self.models.items():
+            model_path = f"{save_dir}/supervised_{name}_{timestamp}.pkl"
+            joblib.dump(model, model_path)
+            print(f"Saved {name} model to {model_path}")
+        
+        # Save ensemble model
+        if self.ensemble_model is not None:
+            ensemble_path = f"{save_dir}/supervised_ensemble_{timestamp}.pkl"
+            joblib.dump(self.ensemble_model, ensemble_path)
+            print(f"Saved ensemble model to {ensemble_path}")
+        
+        # Save preprocessing components
+        components = {
+            'scaler': self.scaler,
+            'label_encoder': self.label_encoder,
+            'feature_selector': self.feature_selector,
+            'feature_columns': self.feature_columns,
+            'feature_importance': self.feature_importance
+        }
+        
+        components_path = f"{save_dir}/supervised_components_{timestamp}.pkl"
+        joblib.dump(components, components_path)
+        print(f"Saved preprocessing components to {components_path}")
+    
+    def load_models(self, model_dir='models', timestamp=None):
+        """
+        Load trained models and components
+        """
+        if timestamp is None:
+            # Find latest timestamp
+            pattern = f"{model_dir}/supervised_components_*.pkl"
+            files = glob.glob(pattern)
+            if not files:
+                raise ValueError(f"No model files found in {model_dir}")
+            latest_file = max(files, key=os.path.getctime)
+            timestamp = latest_file.split('_')[-1].replace('.pkl', '')
+        
+        # Load components
+        components_path = f"{model_dir}/supervised_components_{timestamp}.pkl"
+        components = joblib.load(components_path)
+        
+        self.scaler = components['scaler']
+        self.label_encoder = components['label_encoder']
+        self.feature_selector = components['feature_selector']
+        self.feature_columns = components['feature_columns']
+        self.feature_importance = components['feature_importance']
+        
+        # Load models
+        model_files = glob.glob(f"{model_dir}/supervised_*_{timestamp}.pkl")
+        for file_path in model_files:
+            if 'components' not in file_path:
+                model_name = os.path.basename(file_path).split('_')[1]
+                if model_name == 'ensemble':
+                    self.ensemble_model = joblib.load(file_path)
+                else:
+                    self.models[model_name] = joblib.load(file_path)
+        
+        print(f"Loaded models and components from timestamp {timestamp}")
+
+
+def main():
+    """
+    Main training pipeline
+    """
+    print("="*60)
+    print("SOC ANOMALY DETECTION - SUPERVISED LEARNING PIPELINE")
+    print("="*60)
+    
+    # Initialize detector
+    detector = SupervisedSOCDetector(random_state=42)
+    
+    # Data paths
+    train_path = "data/"  # Folder containing training CSV files
+    test_path = "test/"   # Folder containing test CSV files
+    
+    # Load and preprocess training data
+    print("\n1. LOADING TRAINING DATA")
+    print("-" * 30)
+    df_train = detector.load_csv_files(train_path, sample_size=50000)  # Limit for memory
+    df_train = detector.preprocess_data(df_train, fit_encoders=True)
+    X_train_full, y_train_full = detector.extract_features_and_labels(df_train, fit_scaler=True)
+    
+    # Feature selection
+    X_train_selected = detector.feature_selection(X_train_full, y_train_full, k=50)
+    
+    # Handle class imbalance
+    X_train_balanced, y_train_balanced = detector.handle_class_imbalance(
+        X_train_selected, y_train_full, method='smote'
+    )
+    
+    # Split for validation
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_balanced, y_train_balanced, 
+        test_size=0.2, 
+        random_state=42, 
+        stratify=y_train_balanced
+    )
+    
+    # Memory cleanup
+    del df_train, X_train_full
+    
+    print("\n2. BUILDING AND TRAINING MODELS")
+    print("-" * 30)
+    
+    # Build models
+    detector.build_models()
+    
+    # Train models
+    detector.train_models(X_train, y_train, use_cv=True)
+    
+    # Create ensemble
+    detector.create_ensemble()
+    if detector.ensemble_model is not None:
+        detector.ensemble_model.fit(X_train, y_train)
+    
+    print("\n3. LOADING AND PROCESSING TEST DATA")
+    print("-" * 30)
+    
+    # Load test data
+    df_test = detector.load_csv_files(test_path)
+    df_test = detector.preprocess_data(df_test, fit_encoders=False)
+    X_test_full, y_test = detector.extract_features_and_labels(df_test, fit_scaler=False)
+    
+    # Apply same feature selection
+    X_test_selected = detector.feature_selector.transform(X_test_full)
+    
+    # Memory cleanup
+    del df_test, X_test_full
+    
+    print("\n4. MODEL EVALUATION")
+    print("-" * 30)
+    
+    # Evaluate models
+    results = detector.evaluate_models(X_test_selected, y_test)
+    
+    # Create plots
+    detector.plot_results(results, y_test)
+    
+    # Save models
+    print("\n5. SAVING MODELS")
+    print("-" * 30)
+    detector.save_models()
+    
+    print("\n" + "="*60)
+    print("SUPERVISED LEARNING PIPELINE COMPLETED SUCCESSFULLY")
+    print("="*60)
+    
+    # Print best model
+    best_model = max(results.items(), key=lambda x: x[1]['f1_score'])
+    print(f"Best performing model: {best_model[0]} (F1: {best_model[1]['f1_score']:.4f})")
+
+
+if __name__ == "__main__":
+    main()
