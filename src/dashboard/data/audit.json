@@ -1,0 +1,231 @@
+[
+  {
+    "timestamp": "2025-09-03T11:01:25.679402Z",
+    "event_type": "login_success",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {},
+    "error_message": null
+  },
+  {
+    "id": "fa1a692f-1a75-4255-8172-2aac15830174",
+    "timestamp": "2025-09-03T11:36:38.581555Z",
+    "event_type": "logout",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "success": true,
+    "details": {},
+    "error_message": null
+  },
+  {
+    "id": "b2fe240d-1e15-4c66-8020-23ffc479fcc8",
+    "timestamp": "2025-09-03T11:37:45.175084Z",
+    "event_type": "login_success",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {},
+    "error_message": null
+  },
+  {
+    "id": "40c913e1-95dd-4ab2-8467-f519931560a2",
+    "timestamp": "2025-09-03T11:43:45.268023Z",
+    "event_type": "logout",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "success": true,
+    "details": {},
+    "error_message": null
+  },
+  {
+    "id": "51a4f59a-0cd0-4168-8657-5e043c077a58",
+    "timestamp": "2025-09-03T11:43:56.359632Z",
+    "event_type": "login_failed",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": false,
+    "details": {},
+    "error_message": "MFA token required"
+  },
+  {
+    "id": "b8617db7-ab1f-4142-8c98-563679d9af5b",
+    "timestamp": "2025-09-03T11:44:08.098696Z",
+    "event_type": "login_success",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {},
+    "error_message": null
+  },
+  {
+    "id": "a5711097-06f8-4059-832d-0b38ab943af3",
+    "timestamp": "2025-09-03T12:01:13.510919Z",
+    "event_type": "login_failed",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": false,
+    "details": {},
+    "error_message": "MFA token required"
+  },
+  {
+    "id": "ded15379-dfbc-459d-8215-f987c930c7e4",
+    "timestamp": "2025-09-03T12:01:44.561682Z",
+    "event_type": "login_success",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {},
+    "error_message": null
+  },
+  {
+    "id": "9481a6ae-ccdd-4249-b60f-772e4044008c",
+    "timestamp": "2025-09-03T12:08:45.313934Z",
+    "event_type": "login_failed",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": false,
+    "details": {},
+    "error_message": "MFA token required"
+  },
+  {
+    "id": "fbb29748-537e-4e63-a5f3-ebae1c161c86",
+    "timestamp": "2025-09-03T12:08:58.608388Z",
+    "event_type": "login_success",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {},
+    "error_message": null
+  },
+  {
+    "id": "d8b7be83-ab8f-4dad-8886-441dcfd9915a",
+    "timestamp": "2025-09-05T08:47:54.393961Z",
+    "event_type": "login_failed",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": false,
+    "details": {},
+    "error_message": "Invalid credentials"
+  },
+  {
+    "id": "b8805fca-cbce-4697-a12d-f34c0ec43c65",
+    "timestamp": "2025-09-05T08:48:09.999678Z",
+    "event_type": "login_failed",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": false,
+    "details": {},
+    "error_message": "MFA token required"
+  },
+  {
+    "id": "04d22f45-27c1-45bf-b9e8-e931eaf8578b",
+    "timestamp": "2025-09-05T08:48:44.013664Z",
+    "event_type": "login_success",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {},
+    "error_message": null
+  },
+  {
+    "id": "47711c39-2332-4917-80e8-72b0973bc17a",
+    "timestamp": "2025-09-06T18:09:04.300286Z",
+    "event_type": "csv_upload",
+    "username": "analyst",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": "Uploaded CSV file: train4.csv (97588754 bytes)",
+    "error_message": null
+  },
+  {
+    "id": "a760826b-d336-4db5-aae8-91c38ac198e2",
+    "timestamp": "2025-09-06T18:11:54.095209Z",
+    "event_type": "csv_upload",
+    "username": "analyst",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {
+      "filename": "train4.csv",
+      "file_size": 97588754,
+      "file_id": "81cc9ebb-260f-4a89-a005-11646c5bfd7b"
+    },
+    "error_message": null
+  },
+  {
+    "id": "02849f39-3188-4a94-a6da-d6969ca4659c",
+    "timestamp": "2025-09-06T18:12:10.257114Z",
+    "event_type": "csv_analysis",
+    "username": "analyst",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {
+      "filename": "train4.csv",
+      "file_id": "81cc9ebb-260f-4a89-a005-11646c5bfd7b",
+      "anomalies_detected": 4372,
+      "total_records": 50000
+    },
+    "error_message": null
+  },
+  {
+    "id": "15299bd3-c656-4b47-8e6f-f3d9a14d2dad",
+    "timestamp": "2025-09-06T18:15:57.038543Z",
+    "event_type": "csv_upload",
+    "username": "analyst",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {
+      "filename": "train4.csv",
+      "file_size": 97588754,
+      "file_id": "7ba6a49a-8a2a-4a02-9dc4-3e2bdd2a286e"
+    },
+    "error_message": null
+  },
+  {
+    "id": "f35dcb47-1463-4b75-9813-20255aa35a6f",
+    "timestamp": "2025-09-06T18:16:05.918051Z",
+    "event_type": "csv_analysis",
+    "username": "analyst",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {
+      "filename": "train4.csv",
+      "file_id": "7ba6a49a-8a2a-4a02-9dc4-3e2bdd2a286e",
+      "anomalies_detected": 4372,
+      "total_records": 50000
+    },
+    "error_message": null
+  },
+  {
+    "id": "129e45ce-6243-41de-94ed-75ed76706144",
+    "timestamp": "2025-09-06T18:16:17.072530Z",
+    "event_type": "csv_report_generated",
+    "username": "analyst",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {
+      "report_id": "c71e0497-92bf-401a-9042-6ea800143e02",
+      "action": "download"
+    },
+    "error_message": null
+  }
+]

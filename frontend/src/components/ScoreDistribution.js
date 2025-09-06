@@ -15,7 +15,13 @@ const ScoreDistribution = () => {
 
   const fetchDistributionData = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/score-distribution');
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('http://localhost:5000/api/score-distribution', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         
