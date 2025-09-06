@@ -123,11 +123,26 @@ class SupervisedSOCDetector:
             
             # For headerless files, assign column names if we don't have reference
             if not has_headers and reference_columns is None:
-                # Create generic column names, assuming last column is label
+                # Use standard UNSW-NB15 column names for consistency
                 n_cols = len(df.columns)
-                df.columns = [f'feature_{i}' for i in range(n_cols-1)] + ['label']
-                reference_columns = list(df.columns)
-                print(f"Created {len(reference_columns)} generic column names")
+                if n_cols == 49:  # UNSW-NB15 format with 49 columns
+                    unsw_columns = [
+                        'srcip', 'sport', 'dstip', 'dsport', 'proto', 'state', 'dur', 'sbytes', 'dbytes', 'sttl',
+                        'dttl', 'sloss', 'dloss', 'service', 'sload', 'dload', 'spkts', 'dpkts', 'swin', 'dwin',
+                        'stcpb', 'dtcpb', 'smeansz', 'dmeansz', 'trans_depth', 'res_bdy_len', 'sjit', 'djit',
+                        'stime', 'ltime', 'sintpkt', 'dintpkt', 'tcprtt', 'synack', 'ackdat', 'is_sm_ips_ports',
+                        'ct_state_ttl', 'ct_flw_http_mthd', 'is_ftp_login', 'ct_ftp_cmd', 'ct_srv_src', 'ct_srv_dst',
+                        'ct_dst_ltm', 'ct_src_ltm', 'ct_src_dport_ltm', 'ct_dst_sport_ltm', 'ct_dst_src_ltm',
+                        'attack_cat', 'label'
+                    ]
+                    df.columns = unsw_columns
+                    reference_columns = list(df.columns)
+                    print(f"Applied UNSW-NB15 column names ({len(reference_columns)} columns)")
+                else:
+                    # Fallback to generic names
+                    df.columns = [f'feature_{i}' for i in range(n_cols-1)] + ['label']
+                    reference_columns = list(df.columns)
+                    print(f"Created {len(reference_columns)} generic column names")
             
             # Ensure all dataframes have the same columns
             if reference_columns is not None and list(df.columns) != reference_columns:
@@ -161,22 +176,52 @@ class SupervisedSOCDetector:
         """
         first_row = first_row_df.iloc[0]
         
-        # Check if first row contains typical header names
+        # Check if column names (not first row values) contain typical header names
         header_indicators = ['id', 'dur', 'proto', 'service', 'state', 'label', 'attack']
-        string_count = 0
         header_match_count = 0
         
+        # Check column names for header indicators
         for col in first_row_df.columns:
             col_str = str(col).lower()
             if any(indicator in col_str for indicator in header_indicators):
                 header_match_count += 1
-            if isinstance(col, str) and not col.replace('.', '').replace('-', '').isdigit():
-                string_count += 1
         
-        # If we have header indicators or mostly string column names, it has headers
-        has_headers = header_match_count > 0 or string_count > len(first_row_df.columns) * 0.3
+        # If we have clear header indicators in column names, it has headers
+        if header_match_count > 0:
+            return True
         
-        return has_headers
+        # Check if column names look like meaningful headers (not just numbers or generic names)
+        meaningful_column_names = 0
+        for col in first_row_df.columns:
+            col_str = str(col)
+            # Check if column name is meaningful (not just a number or IP address)
+            if (not col_str.replace('.', '').replace('-', '').isdigit() and 
+                len(col_str) > 2 and 
+                not self._looks_like_ip_or_data(col_str)):
+                meaningful_column_names += 1
+        
+        # If most column names look meaningful, it probably has headers
+        has_meaningful_headers = meaningful_column_names > len(first_row_df.columns) * 0.5
+        
+        return has_meaningful_headers
+    
+    def _looks_like_ip_or_data(self, value_str):
+        """
+        Check if a string looks like an IP address or data value rather than a header
+        """
+        # Check for IP address pattern
+        parts = value_str.split('.')
+        if len(parts) == 4:
+            try:
+                all_numeric = all(0 <= int(part) <= 255 for part in parts)
+                if all_numeric:
+                    return True
+            except ValueError:
+                pass
+        
+        # Check if it's mostly numeric
+        numeric_chars = sum(1 for c in value_str if c.isdigit())
+        return numeric_chars > len(value_str) * 0.7
     
     def preprocess_data(self, df, fit_encoders=True):
         """
@@ -299,11 +344,57 @@ class SupervisedSOCDetector:
         feature_cols = [col for col in df.columns if col not in exclude_cols]
         
         if fit_scaler:
+            # Training phase - store feature columns
             self.feature_columns = feature_cols
+            print(f"Training: Using {len(feature_cols)} features")
+            # Extract features using feature columns
+            X = df[self.feature_columns].copy()
+        else:
+            # Testing/prediction phase - handle feature mismatch
+            if self.feature_columns is None:
+                raise ValueError("Model not trained yet - no feature columns available")
             
-        # Extract features
-        X = df[self.feature_columns].copy()
-        
+            # Check if we have a feature mismatch (different column names)
+            if set(feature_cols) != set(self.feature_columns):
+                print(f"Feature mismatch detected:")
+                print(f"  Training features: {len(self.feature_columns)} columns")
+                print(f"  Current features: {len(feature_cols)} columns")
+                
+                # Find common features by position if names don't match
+                common_features = []
+                max_features = min(len(feature_cols), len(self.feature_columns))
+                
+                # Use positional mapping for feature alignment
+                for i in range(max_features):
+                    if i < len(feature_cols):
+                        common_features.append(feature_cols[i])
+                
+                if len(common_features) < len(self.feature_columns):
+                    print(f"Warning: Using only {len(common_features)} common features out of {len(self.feature_columns)} training features")
+                
+                # Create a mapping from current features to training feature positions
+                feature_mapping = {}
+                for i, current_feature in enumerate(common_features):
+                    if i < len(self.feature_columns):
+                        feature_mapping[current_feature] = self.feature_columns[i]
+                
+                # Extract features using common features
+                X = df[common_features].copy()
+                
+                # Pad with zeros if we have fewer features than training
+                if len(common_features) < len(self.feature_columns):
+                    missing_features = len(self.feature_columns) - len(common_features)
+                    padding = np.zeros((len(df), missing_features))
+                    X_array = np.hstack([X.values, padding])
+                    X = pd.DataFrame(X_array, columns=self.feature_columns)
+                else:
+                    # Rename columns to match training feature names
+                    X.columns = self.feature_columns[:len(common_features)]
+            else:
+                # No mismatch - use features directly
+                X = df[self.feature_columns].copy()
+                print(f"Testing: Using {len(self.feature_columns)} features (exact match)")
+            
         # Extract labels
         y = df[label_col].copy()
         
