@@ -592,5 +592,64 @@
       "action": "download_pdf"
     },
     "error_message": null
+  },
+  {
+    "id": "1baf826f-6d61-496b-8a7f-658004792302",
+    "timestamp": "2025-09-06T22:52:44.330834Z",
+    "event_type": "csv_upload",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {
+      "filename": "UNSW-NB15_4.csv",
+      "file_size": 97588754,
+      "file_id": "a83f42a8-bbf2-434c-a2b5-0a7ad94409fc"
+    },
+    "error_message": null
+  },
+  {
+    "id": "965d825a-1973-4113-908a-e5ea9c6af5f4",
+    "timestamp": "2025-09-06T22:52:49.812368Z",
+    "event_type": "csv_analysis",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {
+      "filename": "UNSW-NB15_4.csv",
+      "file_id": "a83f42a8-bbf2-434c-a2b5-0a7ad94409fc",
+      "anomalies_detected": 8745,
+      "total_records": 100000
+    },
+    "error_message": null
+  },
+  {
+    "id": "bcb9565b-0b45-4159-b8c5-e7b755e8ff89",
+    "timestamp": "2025-09-06T22:52:57.952217Z",
+    "event_type": "csv_report_generated",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {
+      "report_id": "de3d54b5-c6a7-421d-9b4e-7fbae5d3728c",
+      "action": "download_pdf"
+    },
+    "error_message": null
+  },
+  {
+    "id": "59f0abea-81f8-42a5-9897-94e14940253c",
+    "timestamp": "2025-09-06T22:53:01.722258Z",
+    "event_type": "csv_report_generated",
+    "username": "admin",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    "success": true,
+    "details": {
+      "report_id": "de3d54b5-c6a7-421d-9b4e-7fbae5d3728c",
+      "action": "download_pdf"
+    },
+    "error_message": null
   }
 ]
