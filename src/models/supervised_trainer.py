@@ -236,6 +236,42 @@ class SupervisedSOCDetector:
         
         return df
     
+    def extract_features_only(self, df, fit_scaler=False):
+        """
+        Extract features from real-time data without labels for prediction
+        """
+        # Ensure we have all required feature columns
+        missing_features = []
+        for feature in self.feature_columns:
+            if feature not in df.columns:
+                missing_features.append(feature)
+        
+        # Add missing features with default values
+        for feature in missing_features:
+            if 'rate' in feature or 'error' in feature:
+                df[feature] = 0.0  # Rate features default to 0
+            elif 'count' in feature:
+                df[feature] = 0  # Count features default to 0
+            elif 'bytes' in feature:
+                df[feature] = 0  # Byte counts default to 0
+            elif feature in ['land', 'wrong_fragment', 'urgent', 'logged_in', 'root_shell', 'su_attempted', 'is_host_login', 'is_guest_login']:
+                df[feature] = 0  # Binary features default to 0
+            elif feature == 'duration':
+                df[feature] = df.get('duration', 0.0)
+            else:
+                df[feature] = 0  # Default numeric features to 0
+        
+        # Extract features in the correct order
+        X = df[self.feature_columns].copy()
+        
+        # Scale features
+        if fit_scaler:
+            X_scaled = self.scaler.fit_transform(X)
+        else:
+            X_scaled = self.scaler.transform(X)
+            
+        return X_scaled
+    
     def extract_features_and_labels(self, df, fit_scaler=True):
         """
         Extract features and labels with advanced feature engineering
@@ -607,7 +643,14 @@ class SupervisedSOCDetector:
             if not files:
                 raise ValueError(f"No model files found in {model_dir}")
             latest_file = max(files, key=os.path.getctime)
-            timestamp = latest_file.split('_')[-1].replace('.pkl', '')
+            # Extract timestamp from filename like 'supervised_components_20250906_154621.pkl'
+            basename = os.path.basename(latest_file)
+            # Split by '_' and take the last two parts (date and time)
+            parts = basename.replace('.pkl', '').split('_')
+            if len(parts) >= 4:  # supervised_components_YYYYMMDD_HHMMSS
+                timestamp = f"{parts[-2]}_{parts[-1]}"
+            else:
+                timestamp = parts[-1]
         
         # Load components
         components_path = f"{model_dir}/supervised_components_{timestamp}.pkl"
@@ -652,8 +695,8 @@ class SupervisedSOCDetector:
             # Preprocess the data
             df = self.preprocess_data(df, fit_encoders=False)
             
-            # Extract features
-            X, _ = self.extract_features_and_labels(df, fit_scaler=False)
+            # Extract features (without labels for real-time prediction)
+            X = self.extract_features_only(df, fit_scaler=False)
             
             # Apply feature selection if available
             if self.feature_selector:

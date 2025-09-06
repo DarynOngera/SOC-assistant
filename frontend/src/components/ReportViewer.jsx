@@ -22,10 +22,11 @@ const ReportViewer = ({ report, onClose }) => {
     );
   }
 
-  const downloadReport = async () => {
+  const downloadReport = async (format = 'csv') => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:5000/api/csv/reports/${report.report_id}/download`, {
+      const endpoint = format === 'pdf' ? 'download-pdf' : 'download';
+      const response = await fetch(`http://localhost:5000/api/csv/reports/${report.report_id}/${endpoint}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -37,7 +38,7 @@ const ReportViewer = ({ report, onClose }) => {
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        a.download = `anomaly_report_${report.report_id}.json`;
+        a.download = `anomaly_report_${report.report_id}.${format}`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -287,11 +288,18 @@ const ReportViewer = ({ report, onClose }) => {
           </div>
           <div className="flex space-x-2">
             <button
-              onClick={downloadReport}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={() => downloadReport('csv')}
+              className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Download className="w-4 h-4 mr-2" />
-              Download
+              CSV
+            </button>
+            <button
+              onClick={() => downloadReport('pdf')}
+              className="flex items-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              PDF
             </button>
             {onClose && (
               <button
