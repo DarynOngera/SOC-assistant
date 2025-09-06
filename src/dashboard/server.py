@@ -7,11 +7,21 @@ Real-time anomaly detection API with WebSocket support and Authentication
 import os
 import sys
 import json
+import tempfile
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+import seaborn as sns
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+import io
 import time
 import threading
-import numpy as np
-import tempfile
-# import pandas as pd
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
@@ -37,7 +47,7 @@ from src.utils.csv_processor import CSVProcessor
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'soc-dashboard-secret-key-change-in-production')
 CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
-socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000"], logger=True, engineio_logger=True)
+socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000"], logger=False, engineio_logger=False)
 
 # Rate limiting
 limiter = Limiter(
@@ -85,11 +95,12 @@ class SOCDashboardAPI:
             model_dir = 'models'
             if os.path.exists(model_dir):
                 self.detector.load_models(model_dir)
-                print("Models loaded successfully")
+                print("✓ Models loaded successfully")
             else:
-                print("No trained models found. Using mock data mode.")
+                print("⚠ No trained models found. Using mock data mode.")
+                self.detector = None
         except Exception as e:
-            print(f"Error loading models: {e}. Using mock data mode.")
+            print(f"✗ Error loading models: {e}")
             self.detector = None
     
     def generate_realistic_network_data(self, batch_size=10):
@@ -105,7 +116,7 @@ class SOCDashboardAPI:
                 template = self.detector.get_feature_template()
                 feature_columns = template.get('feature_columns', [])
             except Exception as e:
-                print(f"Warning: Could not get feature template: {e}")
+                pass  # Silently fallback to default features
                 feature_columns = []
         
         if not feature_columns:
@@ -171,7 +182,7 @@ class SOCDashboardAPI:
         """Process network data through trained models to get real anomaly predictions"""
         processed_data = []
         
-        print(f"Processing {len(network_data)} network records through detection pipeline...")
+        # Processing network records through detection pipeline
         
         for record in network_data:
             if self.detector and hasattr(self.detector, 'predict_single'):
@@ -188,7 +199,7 @@ class SOCDashboardAPI:
                     attack_type = self.classify_attack_type(record, anomaly_score, prediction)
                     
                 except Exception as e:
-                    print(f"Error in model prediction: {e}")
+                    pass  # Fallback to conservative prediction
                     # Fallback to conservative prediction
                     anomaly_score = 0.1
                     prediction = 0
@@ -300,7 +311,7 @@ class SOCDashboardAPI:
                 }
                 new_alerts.append(alert)
                 self.next_alert_id += 1  # Increment ID counter
-                print(f"Alert generated: ID {alert['id']}, Score: {alert['anomaly_score']}, Type: {alert['attack_type']}")
+                pass  # Alert generated silently
         
         # Add to current alerts and history
         self.current_alerts.extend(new_alerts)
@@ -348,19 +359,19 @@ class SOCDashboardAPI:
                     
                     time.sleep(2)  # Process every 2 seconds
                 except Exception as e:
-                    print(f"Error in monitoring loop: {e}")
+                    pass  # Continue monitoring despite errors
                     time.sleep(5)
         
         if not self.is_monitoring:
             self.is_monitoring = True
             monitoring_thread = threading.Thread(target=monitor_loop, daemon=True)
             monitoring_thread.start()
-            print("Real-time monitoring started")
+            pass  # Monitoring started
     
     def stop_monitoring(self):
         """Stop real-time monitoring"""
         self.is_monitoring = False
-        print("Real-time monitoring stopped")
+        pass  # Monitoring stopped
     
     def get_system_stats(self):
         """Get current system statistics"""
@@ -428,9 +439,7 @@ def login():
         })
         
     except Exception as e:
-        print(f"Login error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        pass  # Login error handled
         return jsonify({'error': f'Login failed: {str(e)}'}), 500
 
 @app.route('/api/auth/refresh', methods=['POST'])
@@ -725,7 +734,7 @@ def get_security_alerts():
         })
         
     except Exception as e:
-        print(f"Security alerts error: {e}")
+        pass  # Error handled
         return jsonify({'error': 'Failed to get security alerts'}), 500
 
 # SOC Dashboard Routes (with authentication)
@@ -909,7 +918,7 @@ def get_attack_distribution():
         })
         
     except Exception as e:
-        print(f"Attack distribution error: {e}")
+        pass  # Error handled
         return jsonify({'error': 'Failed to get attack distribution'}), 500
 
 @app.route('/api/attack-trends')
@@ -1010,7 +1019,7 @@ def get_attack_trends():
         })
         
     except Exception as e:
-        print(f"Attack trends error: {e}")
+        pass  # Error handled
         return jsonify({'error': 'Failed to get attack trends'}), 500
 
 @app.route('/api/threat-triage')
@@ -1135,7 +1144,7 @@ def get_threat_triage():
         })
         
     except Exception as e:
-        print(f"Threat triage error: {e}")
+        pass  # Error handled
         return jsonify({'error': 'Failed to get threat triage data'}), 500
 
 # CSV Upload and Analysis Endpoints
@@ -1205,7 +1214,7 @@ def upload_csv():
         }), 201
         
     except Exception as e:
-        print(f"CSV upload error: {e}")
+        pass  # Error handled
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
 @app.route('/api/csv/analyze', methods=['POST'])
@@ -1289,9 +1298,7 @@ def analyze_csv():
         })
         
     except Exception as e:
-        print(f"CSV analysis error: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Error handled
         return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
 
 @app.route('/api/csv/reports', methods=['GET'])
@@ -1307,7 +1314,7 @@ def get_csv_reports():
         })
         
     except Exception as e:
-        print(f"Error getting reports: {e}")
+        pass  # Error handled
         return jsonify({'error': 'Failed to get reports'}), 500
 
 @app.route('/api/csv/reports/<report_id>', methods=['GET'])
@@ -1324,32 +1331,94 @@ def get_csv_report(report_id):
         return jsonify(report)
         
     except Exception as e:
-        print(f"Error getting report {report_id}: {e}")
+        pass  # Error handled
         return jsonify({'error': 'Failed to get report'}), 500
 
 @app.route('/api/csv/reports/<report_id>/download', methods=['GET'])
 @token_required
 @analyst_or_admin_required
 def download_csv_report(report_id):
-    """Download CSV analysis report as JSON file"""
+    """Download CSV analysis report as CSV file"""
     try:
         report = csv_processor.get_report(report_id)
         
         if not report:
             return jsonify({'error': 'Report not found'}), 404
         
-        # Create temporary file for download
-        def json_serializer(obj):
-            if isinstance(obj, np.integer):
-                return int(obj)
-            elif isinstance(obj, np.floating):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            return str(obj)
+        # Create CSV content
+        csv_content = []
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-            json.dump(report, temp_file, indent=2, default=json_serializer)
+        # Add report metadata
+        csv_content.append("# SOC Anomaly Detection Report")
+        csv_content.append(f"# Report ID: {report.get('report_id', 'N/A')}")
+        csv_content.append(f"# Generated: {report.get('timestamp', 'N/A')}")
+        csv_content.append(f"# File: {report.get('filename', 'N/A')}")
+        csv_content.append(f"# Total Records: {report.get('total_records', 'N/A')}")
+        csv_content.append(f"# Anomalies Detected: {report.get('anomaly_count', 'N/A')}")
+        csv_content.append(f"# Anomaly Rate: {report.get('anomaly_rate', 'N/A'):.2%}" if isinstance(report.get('anomaly_rate'), (int, float)) else f"# Anomaly Rate: {report.get('anomaly_rate', 'N/A')}")
+        csv_content.append("")
+        
+        # Add summary statistics
+        if 'summary' in report:
+            summary = report['summary']
+            csv_content.append("# Summary Statistics")
+            for key, value in summary.items():
+                if isinstance(value, (int, float)):
+                    csv_content.append(f"# {key}: {value:.4f}" if isinstance(value, float) else f"# {key}: {value}")
+                else:
+                    csv_content.append(f"# {key}: {value}")
+            csv_content.append("")
+        
+        # Add anomaly details header
+        csv_content.append("# Anomaly Details")
+        csv_content.append("Row_Index,Anomaly_Score,Severity,Attack_Type,Confidence")
+        
+        # Add anomaly data
+        if 'anomalies' in report:
+            for anomaly in report['anomalies']:
+                row_idx = anomaly.get('row_index', 'N/A')
+                score = anomaly.get('anomaly_score', 'N/A')
+                severity = anomaly.get('severity', 'N/A')
+                attack_type = anomaly.get('attack_type', 'N/A')
+                confidence = anomaly.get('confidence', 'N/A')
+                
+                # Format score and confidence as numbers
+                if isinstance(score, (int, float)):
+                    score = f"{score:.6f}"
+                if isinstance(confidence, (int, float)):
+                    confidence = f"{confidence:.4f}"
+                
+                csv_content.append(f"{row_idx},{score},{severity},{attack_type},{confidence}")
+        
+        # If no anomalies section, add feature statistics
+        elif 'feature_stats' in report:
+            csv_content.append("# Feature Statistics")
+            csv_content.append("Feature,Mean,Std,Min,Max,Anomaly_Threshold")
+            
+            for feature, stats in report['feature_stats'].items():
+                mean = stats.get('mean', 'N/A')
+                std = stats.get('std', 'N/A')
+                min_val = stats.get('min', 'N/A')
+                max_val = stats.get('max', 'N/A')
+                threshold = stats.get('threshold', 'N/A')
+                
+                # Format numbers
+                if isinstance(mean, (int, float)):
+                    mean = f"{mean:.6f}"
+                if isinstance(std, (int, float)):
+                    std = f"{std:.6f}"
+                if isinstance(min_val, (int, float)):
+                    min_val = f"{min_val:.6f}"
+                if isinstance(max_val, (int, float)):
+                    max_val = f"{max_val:.6f}"
+                if isinstance(threshold, (int, float)):
+                    threshold = f"{threshold:.6f}"
+                
+                csv_content.append(f"{feature},{mean},{std},{min_val},{max_val},{threshold}")
+        
+        # Create temporary CSV file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, newline='') as temp_file:
+            temp_file.write('\n'.join(csv_content))
             temp_path = temp_file.name
         
         # Log the download
@@ -1369,13 +1438,450 @@ def download_csv_report(report_id):
         return send_file(
             temp_path,
             as_attachment=True,
-            download_name=f"anomaly_report_{report_id}.json",
-            mimetype='application/json'
+            download_name=f"anomaly_report_{report_id}.csv",
+            mimetype='text/csv'
         )
         
     except Exception as e:
-        print(f"Error downloading report {report_id}: {e}")
+        pass  # Error handled
         return jsonify({'error': 'Failed to download report'}), 500
+
+def create_anomaly_charts(report):
+    """Create comprehensive visualization charts for the PDF report"""
+    charts = []
+    
+    try:
+        # Set style for better looking plots
+        plt.style.use('default')
+        sns.set_palette("husl")
+    except Exception as e:
+        pass  # Continue without custom styling
+        # Continue without custom styling
+    
+    # Get detection results
+    detection_results = report.get('detection_results', {})
+    anomaly_scores = detection_results.get('anomaly_scores', [])
+    predictions = detection_results.get('predictions', [])
+    feature_importance = detection_results.get('feature_importance', {})
+    
+    # Chart 1: Main Analysis Dashboard (4 subplots)
+    try:
+        if anomaly_scores and predictions:
+            fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+            fig.suptitle('Comprehensive Anomaly Detection Analysis', fontsize=16, fontweight='bold')
+            
+            # Anomaly Score Distribution
+            try:
+                axes[0, 0].hist(anomaly_scores, bins=30, alpha=0.7, color='skyblue', edgecolor='black')
+                axes[0, 0].axvline(x=0.5, color='red', linestyle='--', label='Threshold (0.5)')
+                axes[0, 0].set_xlabel('Anomaly Score')
+                axes[0, 0].set_ylabel('Frequency')
+                axes[0, 0].set_title('Distribution of Anomaly Scores')
+                axes[0, 0].legend()
+                axes[0, 0].grid(True, alpha=0.3)
+            except Exception as e:
+                pass  # Error creating histogram
+                axes[0, 0].text(0.5, 0.5, 'Error creating\nhistogram', ha='center', va='center', transform=axes[0, 0].transAxes)
+            
+            # Normal vs Anomaly Pie Chart
+            try:
+                normal_count = len(anomaly_scores) - sum(predictions)
+                anomaly_count = sum(predictions)
+                labels = ['Normal', 'Anomaly']
+                counts = [normal_count, anomaly_count]
+                colors = ['lightgreen', 'lightcoral']
+                axes[0, 1].pie(counts, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+                axes[0, 1].set_title('Normal vs Anomaly Distribution')
+            except Exception as e:
+                pass  # Error creating pie chart
+                axes[0, 1].text(0.5, 0.5, 'Error creating\npie chart', ha='center', va='center', transform=axes[0, 1].transAxes)
+            
+            # Feature Importance (Top 10)
+            try:
+                if feature_importance:
+                    top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:10]
+                    if top_features:
+                        features, importance = zip(*top_features)
+                        y_pos = np.arange(len(features))
+                        axes[1, 0].barh(y_pos, importance, color='lightblue')
+                        axes[1, 0].set_yticks(y_pos)
+                        axes[1, 0].set_yticklabels([f[:15] + '...' if len(f) > 15 else f for f in features])
+                        axes[1, 0].set_xlabel('Importance Score')
+                        axes[1, 0].set_title('Top 10 Feature Importance')
+                        axes[1, 0].grid(True, alpha=0.3)
+                else:
+                    axes[1, 0].text(0.5, 0.5, 'Feature importance\nnot available', 
+                                   ha='center', va='center', transform=axes[1, 0].transAxes)
+                    axes[1, 0].set_title('Feature Importance')
+            except Exception as e:
+                pass  # Error creating feature chart
+                axes[1, 0].text(0.5, 0.5, 'Error creating\nfeature chart', ha='center', va='center', transform=axes[1, 0].transAxes)
+            
+            # Anomaly Scores Over Samples
+            try:
+                if len(anomaly_scores) > 10:
+                    sample_indices = np.linspace(0, len(anomaly_scores)-1, min(100, len(anomaly_scores)), dtype=int)
+                    sampled_scores = [anomaly_scores[i] for i in sample_indices]
+                    axes[1, 1].plot(sample_indices, sampled_scores, marker='o', markersize=3, alpha=0.7, color='blue')
+                    axes[1, 1].axhline(y=0.5, color='red', linestyle='--', alpha=0.7, label='Threshold')
+                    axes[1, 1].set_xlabel('Sample Index')
+                    axes[1, 1].set_ylabel('Anomaly Score')
+                    axes[1, 1].set_title('Anomaly Scores Over Samples')
+                    axes[1, 1].legend()
+                    axes[1, 1].grid(True, alpha=0.3)
+                else:
+                    axes[1, 1].text(0.5, 0.5, 'Insufficient data\nfor time series', 
+                                   ha='center', va='center', transform=axes[1, 1].transAxes)
+                    axes[1, 1].set_title('Anomaly Scores Over Time')
+            except Exception as e:
+                pass  # Error creating time series
+                axes[1, 1].text(0.5, 0.5, 'Error creating\ntime series', ha='center', va='center', transform=axes[1, 1].transAxes)
+            
+            plt.tight_layout()
+            
+            # Save main analysis chart
+            img_buffer = io.BytesIO()
+            plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            charts.append(('main_analysis', img_buffer))
+            plt.close()
+    except Exception as e:
+        pass  # Error creating main analysis chart
+    
+    # Chart 2: Severity Distribution (if available)
+    try:
+        severity_dist = detection_results.get('severity_distribution', {})
+        if severity_dist and any(severity_dist.values()):
+            fig, ax = plt.subplots(figsize=(8, 6))
+            colors_map = {'high': 'red', 'medium': 'orange', 'low': 'yellow'}
+            colors_list = [colors_map.get(sev.lower(), 'blue') for sev in severity_dist.keys()]
+            
+            wedges, texts, autotexts = ax.pie(severity_dist.values(), labels=severity_dist.keys(), 
+                                            autopct='%1.1f%%', colors=colors_list, startangle=90)
+            ax.set_title('Anomaly Severity Distribution', fontsize=14, fontweight='bold')
+            
+            img_buffer = io.BytesIO()
+            plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            charts.append(('severity_distribution', img_buffer))
+            plt.close()
+    except Exception as e:
+        print(f"Error creating severity distribution chart: {e}")
+    
+    # Chart 3: Score Statistics Box Plot
+    try:
+        if anomaly_scores:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            # Separate scores by prediction
+            normal_scores = [score for i, score in enumerate(anomaly_scores) if i < len(predictions) and predictions[i] == 0]
+            anomaly_scores_only = [score for i, score in enumerate(anomaly_scores) if i < len(predictions) and predictions[i] == 1]
+            
+            data_to_plot = []
+            labels = []
+            if normal_scores:
+                data_to_plot.append(normal_scores)
+                labels.append('Normal')
+            if anomaly_scores_only:
+                data_to_plot.append(anomaly_scores_only)
+                labels.append('Anomaly')
+            
+            if data_to_plot:
+                bp = ax.boxplot(data_to_plot, labels=labels, patch_artist=True)
+                colors = ['lightgreen', 'lightcoral']
+                for patch, color in zip(bp['boxes'], colors[:len(bp['boxes'])]):
+                    patch.set_facecolor(color)
+                
+                ax.set_ylabel('Anomaly Score')
+                ax.set_title('Score Distribution by Classification', fontsize=14, fontweight='bold')
+                ax.grid(True, alpha=0.3)
+                
+                img_buffer = io.BytesIO()
+                plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+                img_buffer.seek(0)
+                charts.append(('score_statistics', img_buffer))
+                plt.close()
+    except Exception as e:
+        print(f"Error creating box plot chart: {e}")
+    
+    return charts
+
+@app.route('/api/csv/reports/<report_id>/download-pdf', methods=['GET'])
+@token_required
+@analyst_or_admin_required
+def download_pdf_report(report_id):
+    """Download CSV analysis report as PDF file with charts"""
+    try:
+        report = csv_processor.get_report(report_id)
+        
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+        
+        # Create temporary PDF file
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+            temp_path = temp_file.name
+        
+        # Create PDF document
+        doc = SimpleDocTemplate(temp_path, pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            textColor=colors.darkblue
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            spaceAfter=12,
+            textColor=colors.darkblue
+        )
+        
+        # Title
+        story.append(Paragraph("SOC Anomaly Detection Report", title_style))
+        story.append(Spacer(1, 20))
+        
+        # Report metadata table - use comprehensive data
+        detection_results = report.get('detection_results', {})
+        file_info = report.get('file_info', {})
+        
+        metadata = [
+            ['Report ID:', report.get('report_id', 'N/A')],
+            ['Generated:', report.get('timestamp', 'N/A')],
+            ['File:', file_info.get('filename', 'N/A')],
+            ['Total Records:', str(detection_results.get('total_records', 'N/A'))],
+            ['Anomalies Detected:', str(detection_results.get('anomalies_detected', 'N/A'))],
+            ['Anomaly Rate:', f"{detection_results.get('anomaly_percentage', 0):.2f}%" if isinstance(detection_results.get('anomaly_percentage'), (int, float)) else str(detection_results.get('anomaly_percentage', 'N/A'))],
+            ['Model Used:', detection_results.get('model_used', 'N/A')],
+            ['Detection Method:', detection_results.get('method', 'N/A')]
+        ]
+        
+        metadata_table = Table(metadata, colWidths=[2*inch, 3*inch])
+        metadata_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('BACKGROUND', (1, 0), (1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(metadata_table)
+        story.append(Spacer(1, 20))
+        
+        # Summary statistics from comprehensive report
+        summary_stats = report.get('summary_statistics', {})
+        if summary_stats:
+            story.append(Paragraph("Summary Statistics", heading_style))
+            summary_data = []
+            
+            # Basic statistics
+            summary_data.append(['Total Records Analyzed', str(summary_stats.get('total_records_analyzed', 'N/A'))])
+            summary_data.append(['Anomalies Detected', str(summary_stats.get('anomalies_detected', 'N/A'))])
+            summary_data.append(['Anomaly Rate', f"{summary_stats.get('anomaly_rate_percentage', 0):.2f}%"])
+            summary_data.append(['Normal Records', str(summary_stats.get('normal_records', 'N/A'))])
+            
+            # Score statistics
+            score_stats = summary_stats.get('score_statistics', {})
+            if score_stats:
+                summary_data.append(['Mean Anomaly Score', f"{score_stats.get('mean_score', 0):.4f}"])
+                summary_data.append(['Median Anomaly Score', f"{score_stats.get('median_score', 0):.4f}"])
+                summary_data.append(['Max Anomaly Score', f"{score_stats.get('max_score', 0):.4f}"])
+                summary_data.append(['95th Percentile Score', f"{score_stats.get('percentile_95', 0):.4f}"])
+            
+            # Model performance
+            model_perf = summary_stats.get('model_performance', {})
+            if model_perf:
+                summary_data.append(['High Confidence Anomalies', str(model_perf.get('high_confidence_anomalies', 'N/A'))])
+                summary_data.append(['Medium Confidence Anomalies', str(model_perf.get('medium_confidence_anomalies', 'N/A'))])
+                summary_data.append(['Detection Threshold', str(model_perf.get('detection_threshold', 'N/A'))])
+            
+            if summary_data:
+                summary_table = Table(summary_data, colWidths=[2.5*inch, 2.5*inch])
+                summary_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (0, -1), colors.lightblue),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ]))
+                story.append(summary_table)
+                story.append(Spacer(1, 20))
+        
+        # Generate and add charts
+        try:
+            charts = create_anomaly_charts(report)
+            
+            if charts:
+                story.append(Paragraph("Anomaly Analysis Charts", heading_style))
+                story.append(Spacer(1, 10))
+                
+                for chart_name, chart_buffer in charts:
+                    try:
+                        # Create image directly from BytesIO buffer
+                        chart_buffer.seek(0)  # Reset buffer position
+                        img = Image(chart_buffer, width=6*inch, height=3.6*inch)
+                        story.append(img)
+                        story.append(Spacer(1, 15))
+                    except Exception as e:
+                        print(f"Error adding chart {chart_name} to PDF: {e}")
+                        story.append(Paragraph(f"Chart '{chart_name}' could not be generated", styles['Normal']))
+                        story.append(Spacer(1, 10))
+            else:
+                story.append(Paragraph("Charts", heading_style))
+                story.append(Paragraph("No charts could be generated for this report.", styles['Normal']))
+                story.append(Spacer(1, 15))
+        except Exception as e:
+            print(f"Error generating charts: {e}")
+            story.append(Paragraph("Charts", heading_style))
+            story.append(Paragraph("Charts could not be generated due to technical issues.", styles['Normal']))
+            story.append(Spacer(1, 15))
+        
+        # Add detailed analysis section
+        detailed_analysis = report.get('detailed_analysis', {})
+        if detailed_analysis:
+            story.append(Paragraph("Detailed Analysis", heading_style))
+            
+            # Data Quality Assessment
+            data_quality = detailed_analysis.get('data_quality_assessment', {})
+            if data_quality:
+                story.append(Paragraph("Data Quality Assessment", ParagraphStyle('SubHeading', parent=styles['Heading3'], fontSize=12, spaceAfter=6)))
+                quality_data = [
+                    ['Original Records', str(data_quality.get('original_records', 'N/A'))],
+                    ['Processed Records', str(data_quality.get('processed_records', 'N/A'))],
+                    ['Features Analyzed', str(data_quality.get('features_analyzed', 'N/A'))],
+                    ['Data Completeness', str(data_quality.get('data_completeness', 'N/A'))]
+                ]
+                
+                quality_table = Table(quality_data, colWidths=[2*inch, 2*inch])
+                quality_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6)
+                ]))
+                story.append(quality_table)
+                story.append(Spacer(1, 10))
+            
+            # Anomaly Patterns
+            anomaly_patterns = detailed_analysis.get('anomaly_patterns', {})
+            if anomaly_patterns:
+                story.append(Paragraph("Anomaly Patterns", ParagraphStyle('SubHeading', parent=styles['Heading3'], fontSize=12, spaceAfter=6)))
+                pattern_data = [
+                    ['Distribution Type', str(anomaly_patterns.get('distribution_type', 'N/A'))],
+                    ['Score Concentration', str(anomaly_patterns.get('score_concentration', 'N/A'))],
+                    ['Attack Indicators', 'Yes' if anomaly_patterns.get('potential_attack_indicators') else 'No']
+                ]
+                
+                pattern_table = Table(pattern_data, colWidths=[2*inch, 2*inch])
+                pattern_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6)
+                ]))
+                story.append(pattern_table)
+                story.append(Spacer(1, 15))
+        
+        # Add recommendations section
+        recommendations = report.get('recommendations', [])
+        if recommendations:
+            story.append(Paragraph("Security Recommendations", heading_style))
+            
+            for i, rec in enumerate(recommendations, 1):
+                story.append(Paragraph(f"{i}. {rec}", styles['Normal']))
+                story.append(Spacer(1, 6))
+            
+            story.append(Spacer(1, 15))
+        
+        # Anomaly details table from detection results
+        anomaly_records = detection_results.get('anomaly_records', [])
+        if anomaly_records:
+            story.append(PageBreak())
+            story.append(Paragraph("Top Anomalous Records", heading_style))
+            story.append(Spacer(1, 10))
+            
+            # Table headers
+            anomaly_data = [['Index', 'Anomaly Score', 'Confidence', 'Key Features']]
+            
+            # Add anomaly rows (limit to first 20 for PDF readability)
+            for i, record in enumerate(anomaly_records[:20]):
+                idx = str(i + 1)
+                score = f"{record.get('anomaly_score', 0):.4f}" if isinstance(record.get('anomaly_score'), (int, float)) else str(record.get('anomaly_score', 'N/A'))
+                confidence = f"{record.get('confidence', 0):.3f}" if isinstance(record.get('confidence'), (int, float)) else str(record.get('confidence', 'N/A'))
+                
+                # Get key features (first few non-score fields)
+                key_features = []
+                for key, value in record.items():
+                    if key not in ['anomaly_score', 'confidence'] and len(key_features) < 3:
+                        key_features.append(f"{key}: {value}")
+                features_str = "; ".join(key_features) if key_features else "N/A"
+                if len(features_str) > 40:
+                    features_str = features_str[:37] + "..."
+                
+                anomaly_data.append([idx, score, confidence, features_str])
+            
+            if len(anomaly_records) > 20:
+                anomaly_data.append(['...', '...', '...', f"Showing top 20 of {len(anomaly_records)} anomalies"])
+            
+            anomaly_table = Table(anomaly_data, colWidths=[0.5*inch, 1*inch, 1*inch, 3.5*inch])
+            anomaly_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+            ]))
+            
+            story.append(anomaly_table)
+        
+        # Build PDF
+        doc.build(story)
+        
+        # Log the download
+        username = request.current_user['username']
+        ip_address, user_agent = get_client_info()
+        audit_logger.log_event(
+            event_type=AuditEventType.CSV_REPORT_GENERATED,
+            username=username,
+            details={
+                'report_id': report_id,
+                'action': 'download_pdf'
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        
+        return send_file(
+            temp_path,
+            as_attachment=True,
+            download_name=f"anomaly_report_{report_id}.pdf",
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        import traceback
+        print(f"Error downloading PDF report {report_id}: {e}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({'error': f'Failed to download PDF report: {str(e)}'}), 500
 
 @app.route('/api/csv/cleanup', methods=['POST'])
 @token_required
@@ -1446,7 +1952,7 @@ def handle_disconnect():
     """Handle client disconnection"""
     from flask import session
     username = session.get('username', 'Unknown')
-    print(f'Client disconnected: {username}')
+    pass  # Client disconnected silently
 
 @socketio.on('request_alerts')
 def handle_request_alerts(data=None):
