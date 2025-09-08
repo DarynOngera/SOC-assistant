@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Flag, X, ChevronDown, ChevronUp, Search, Filter } from 'lucide-react';
+import { Flag, X, ChevronDown, ChevronUp, Search } from 'lucide-react';
 
 const AlertsTable = ({ alerts, onAlertAction }) => {
   const [sortField, setSortField] = useState('timestamp');
@@ -183,7 +183,7 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {paginatedAlerts.map((alert, index) => (
-              <tr key={`alert-${alert.id}-${alert.timestamp}-${index}`} className="hover:bg-gray-50">
+              <tr key={`alert-${alert.alert_id}-${alert.timestamp}-${index}`} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {formatTimestamp(alert.timestamp)}
                 </td>
@@ -226,7 +226,7 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => onAlertAction(alert.id, 'flag')}
+                      onClick={() => onAlertAction(alert.alert_id, 'flag')}
                       disabled={alert.status === 'flagged'}
                       className="text-warning-600 hover:text-warning-900 disabled:text-gray-400 disabled:cursor-not-allowed"
                       title="Flag Alert"
@@ -234,7 +234,7 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
                       <Flag className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => onAlertAction(alert.id, 'dismiss')}
+                      onClick={() => onAlertAction(alert.alert_id, 'dismiss')}
                       disabled={alert.status === 'dismissed'}
                       className="text-gray-600 hover:text-gray-900 disabled:text-gray-400 disabled:cursor-not-allowed"
                       title="Dismiss Alert"
