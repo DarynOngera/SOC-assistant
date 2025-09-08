@@ -42,13 +42,13 @@ def main():
         models_dir.mkdir()
         print(f"✓ Created models directory: {models_dir}")
     
-    # Import and run training
+    # Import and run enhanced training
     try:
-        from src.models.supervised_trainer import SupervisedSOCDetector, main as train_main
+        from src.models.enhanced_trainer import EnhancedSOCDetector, main as enhanced_train_main
         
-        print("✓ Starting model training pipeline...")
-        train_main()
-        print("\n✓ Model training completed successfully!")
+        print("✓ Starting enhanced model training pipeline...")
+        enhanced_train_main()
+        print("\n✓ Enhanced model training completed successfully!")
         
         # Verify model files were created
         model_files = list(models_dir.glob("*.pkl")) + list(models_dir.glob("*.h5"))
