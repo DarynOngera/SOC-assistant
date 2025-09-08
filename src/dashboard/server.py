@@ -208,7 +208,17 @@ def log_login_success(username, ip_address, user_agent):
     audit_logger.log_event(
         event_type='login_success',
         username=username,
-        details={'action': 'login_success'},
+        details={'action': 'login', 'status': 'success'},
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+
+def log_login_failed(username, ip_address, user_agent, reason):
+    """Log failed login attempt"""
+    audit_logger.log_event(
+        event_type='login_failed',
+        username=username,
+        details={'action': 'login', 'status': 'failed', 'reason': reason},
         ip_address=ip_address,
         user_agent=user_agent
     )
@@ -675,6 +685,32 @@ csv_processor = CSVProcessor(
 )
 
 # Authentication endpoints
+@app.route('/api/auth/check-mfa', methods=['POST'])
+@limiter.limit("10 per minute")
+def check_mfa_requirement():
+    """Check if user requires MFA without authenticating"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        
+        if not username:
+            return jsonify({'error': 'Username required'}), 400
+        
+        # Get user info without authentication
+        user = mongodb_dal.get_user_by_username(username)
+        if not user:
+            # Don't reveal if user exists or not for security
+            return jsonify({'mfa_required': False}), 200
+        
+        # Check if MFA is enabled for this user
+        mfa_required = user.get('mfa_enabled', False) and user.get('mfa_secret')
+        
+        return jsonify({'mfa_required': bool(mfa_required)}), 200
+        
+    except Exception as e:
+        print(f"Error checking MFA requirement: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
 @app.route('/api/auth/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def login():
@@ -858,6 +894,7 @@ def disable_mfa():
         return jsonify({'message': message})
         
     except Exception as e:
+        print(f"Error disabling MFA: {e}")
         return jsonify({'error': 'MFA disable failed'}), 500
 
 # Admin user management endpoints
@@ -1057,6 +1094,280 @@ def database_stats():
             'timestamp': datetime.now().isoformat()
         }), 500
 
+# Network topology endpoints
+@app.route('/api/network/topology')
+@token_required
+@analyst_or_admin_required
+def get_network_topology():
+    """Get network topology data for visualization"""
+    try:
+        # Get recent alerts for network analysis
+        alerts_data = mongodb_dal.get_alerts(per_page=500)
+        alerts = alerts_data.get('alerts', [])
+        
+        # Build network topology from alerts
+        nodes = {}
+        edges = []
+        subnets = {}
+        
+        for alert in alerts:
+            src_ip = alert.get('source_ip')
+            dst_ip = alert.get('destination_ip')
+            
+            if not src_ip or not dst_ip:
+                continue
+                
+            # Classify IP addresses by subnet
+            src_subnet = get_subnet(src_ip)
+            dst_subnet = get_subnet(dst_ip)
+            
+            # Add nodes
+            if src_ip not in nodes:
+                nodes[src_ip] = {
+                    'id': src_ip,
+                    'ip': src_ip,
+                    'subnet': src_subnet,
+                    'type': classify_ip_type(src_ip),
+                    'alert_count': 0,
+                    'severity_counts': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0},
+                    'attack_types': set(),
+                    'ports': set()
+                }
+            
+            if dst_ip not in nodes:
+                nodes[dst_ip] = {
+                    'id': dst_ip,
+                    'ip': dst_ip,
+                    'subnet': dst_subnet,
+                    'type': classify_ip_type(dst_ip),
+                    'alert_count': 0,
+                    'severity_counts': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0},
+                    'attack_types': set(),
+                    'ports': set()
+                }
+            
+            # Update node statistics
+            severity = alert.get('severity', 'low').lower()
+            attack_type = alert.get('attack_type', 'Unknown')
+            
+            nodes[src_ip]['alert_count'] += 1
+            nodes[src_ip]['severity_counts'][severity] += 1
+            nodes[src_ip]['attack_types'].add(attack_type)
+            
+            nodes[dst_ip]['alert_count'] += 1
+            nodes[dst_ip]['severity_counts'][severity] += 1
+            nodes[dst_ip]['attack_types'].add(attack_type)
+            
+            # Add ports if available
+            if alert.get('source_port'):
+                nodes[src_ip]['ports'].add(alert['source_port'])
+            if alert.get('destination_port'):
+                nodes[dst_ip]['ports'].add(alert['destination_port'])
+            
+            # Add edge
+            edge_id = f"{src_ip}->{dst_ip}"
+            edge_exists = False
+            for edge in edges:
+                if edge['id'] == edge_id:
+                    edge['weight'] += 1
+                    edge['alerts'].append({
+                        'timestamp': alert.get('timestamp'),
+                        'severity': severity,
+                        'attack_type': attack_type,
+                        'score': alert.get('anomaly_score', 0)
+                    })
+                    edge_exists = True
+                    break
+            
+            if not edge_exists:
+                edges.append({
+                    'id': edge_id,
+                    'source': src_ip,
+                    'target': dst_ip,
+                    'weight': 1,
+                    'alerts': [{
+                        'timestamp': alert.get('timestamp'),
+                        'severity': severity,
+                        'attack_type': attack_type,
+                        'score': alert.get('anomaly_score', 0)
+                    }]
+                })
+            
+            # Track subnets
+            if src_subnet not in subnets:
+                subnets[src_subnet] = {'ips': set(), 'alert_count': 0}
+            if dst_subnet not in subnets:
+                subnets[dst_subnet] = {'ips': set(), 'alert_count': 0}
+            
+            subnets[src_subnet]['ips'].add(src_ip)
+            subnets[dst_subnet]['ips'].add(dst_ip)
+            subnets[src_subnet]['alert_count'] += 1
+            subnets[dst_subnet]['alert_count'] += 1
+        
+        # Convert sets to lists for JSON serialization
+        for node in nodes.values():
+            node['attack_types'] = list(node['attack_types'])
+            node['ports'] = list(node['ports'])
+        
+        # Convert subnet data
+        subnet_data = []
+        for subnet, data in subnets.items():
+            subnet_data.append({
+                'subnet': subnet,
+                'ip_count': len(data['ips']),
+                'alert_count': data['alert_count'],
+                'ips': list(data['ips'])
+            })
+        
+        return jsonify({
+            'nodes': list(nodes.values()),
+            'edges': edges,
+            'subnets': subnet_data,
+            'stats': {
+                'total_nodes': len(nodes),
+                'total_edges': len(edges),
+                'total_subnets': len(subnets)
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error getting network topology: {e}")
+        return jsonify({'error': 'Failed to get network topology'}), 500
+
+def get_subnet(ip):
+    """Get subnet classification for IP address"""
+    try:
+        parts = ip.split('.')
+        if len(parts) != 4:
+            return 'unknown'
+        
+        first_octet = int(parts[0])
+        second_octet = int(parts[1])
+        
+        if first_octet == 192 and second_octet == 168:
+            return f"192.168.{parts[2]}.0/24"
+        elif first_octet == 10:
+            return f"10.{parts[1]}.0.0/16"
+        elif first_octet == 172 and 16 <= second_octet <= 31:
+            return f"172.{parts[1]}.0.0/16"
+        elif first_octet in [127]:
+            return "localhost"
+        else:
+            return f"{parts[0]}.{parts[1]}.0.0/16"
+    except:
+        return 'unknown'
+
+def classify_ip_type(ip):
+    """Classify IP address type"""
+    try:
+        parts = ip.split('.')
+        if len(parts) != 4:
+            return 'unknown'
+        
+        first_octet = int(parts[0])
+        second_octet = int(parts[1])
+        
+        if first_octet == 192 and second_octet == 168:
+            return 'internal'
+        elif first_octet == 10:
+            return 'internal'
+        elif first_octet == 172 and 16 <= second_octet <= 31:
+            return 'internal'
+        elif first_octet == 127:
+            return 'localhost'
+        else:
+            return 'external'
+    except:
+        return 'unknown'
+
+@app.route('/api/network/connections')
+@token_required
+@analyst_or_admin_required
+def get_network_connections():
+    """Get active network connections"""
+    try:
+        time_filter = request.args.get('timeframe', '1h')
+        
+        # Calculate time threshold
+        now = datetime.utcnow()
+        if time_filter == '1h':
+            threshold = now - timedelta(hours=1)
+        elif time_filter == '24h':
+            threshold = now - timedelta(hours=24)
+        elif time_filter == '7d':
+            threshold = now - timedelta(days=7)
+        else:
+            threshold = now - timedelta(hours=1)
+        
+        # Get recent alerts
+        alerts_data = mongodb_dal.get_alerts(per_page=1000)
+        alerts = alerts_data.get('alerts', [])
+        recent_alerts = [a for a in alerts if a.get('timestamp', now) >= threshold]
+        
+        # Analyze connections
+        connections = {}
+        for alert in recent_alerts:
+            src_ip = alert.get('source_ip')
+            dst_ip = alert.get('destination_ip')
+            src_port = alert.get('source_port', 0)
+            dst_port = alert.get('destination_port', 0)
+            
+            if not src_ip or not dst_ip:
+                continue
+            
+            conn_key = f"{src_ip}:{src_port}->{dst_ip}:{dst_port}"
+            
+            if conn_key not in connections:
+                connections[conn_key] = {
+                    'source_ip': src_ip,
+                    'destination_ip': dst_ip,
+                    'source_port': src_port,
+                    'destination_port': dst_port,
+                    'connection_count': 0,
+                    'total_score': 0,
+                    'max_score': 0,
+                    'attack_types': set(),
+                    'severities': set(),
+                    'first_seen': alert.get('timestamp'),
+                    'last_seen': alert.get('timestamp')
+                }
+            
+            conn = connections[conn_key]
+            conn['connection_count'] += 1
+            conn['total_score'] += alert.get('anomaly_score', 0)
+            conn['max_score'] = max(conn['max_score'], alert.get('anomaly_score', 0))
+            conn['attack_types'].add(alert.get('attack_type', 'Unknown'))
+            conn['severities'].add(alert.get('severity', 'low'))
+            
+            # Update timestamps
+            alert_time = alert.get('timestamp')
+            if alert_time:
+                if conn['first_seen'] is None or alert_time < conn['first_seen']:
+                    conn['first_seen'] = alert_time
+                if conn['last_seen'] is None or alert_time > conn['last_seen']:
+                    conn['last_seen'] = alert_time
+        
+        # Convert to list and calculate averages
+        connection_list = []
+        for conn in connections.values():
+            conn['avg_score'] = conn['total_score'] / conn['connection_count'] if conn['connection_count'] > 0 else 0
+            conn['attack_types'] = list(conn['attack_types'])
+            conn['severities'] = list(conn['severities'])
+            connection_list.append(conn)
+        
+        # Sort by connection count and score
+        connection_list.sort(key=lambda x: (x['connection_count'], x['max_score']), reverse=True)
+        
+        return jsonify({
+            'connections': connection_list[:100],  # Limit to top 100
+            'timeframe': time_filter,
+            'total_connections': len(connection_list)
+        })
+        
+    except Exception as e:
+        print(f"Error getting network connections: {e}")
+        return jsonify({'error': 'Failed to get network connections'}), 500
+
 # SOC Dashboard Routes (with authentication)
 @app.route('/api/alerts')
 @token_required
@@ -1122,7 +1433,7 @@ def threshold():
     
     return jsonify({'threshold': dashboard_api.threshold})
 
-@app.route('/api/alerts/<int:alert_id>/flag', methods=['POST'])
+@app.route('/api/alerts/<alert_id>/flag', methods=['POST'])
 @token_required
 @analyst_or_admin_required
 def flag_alert(alert_id):
@@ -1130,8 +1441,14 @@ def flag_alert(alert_id):
     try:
         username = request.current_user['username']
         
+        # Convert alert_id to integer if it's a string
+        try:
+            alert_id_int = int(alert_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid alert ID format'}), 400
+        
         success, message = dashboard_api.dal.update_alert(
-            alert_id=alert_id,
+            alert_id=alert_id_int,
             updates={
                 'flagged': True,
                 'status': 'flagged'
@@ -1147,7 +1464,7 @@ def flag_alert(alert_id):
                 ip_address=get_client_info()[0],
                 action="flag_alert",
                 success=True,
-                details={'alert_id': alert_id, 'action': 'flagged'}
+                details={'alert_id': alert_id_int, 'action': 'flagged'}
             )
             return jsonify({'success': True})
         else:
@@ -1157,7 +1474,7 @@ def flag_alert(alert_id):
         print(f"Error flagging alert {alert_id}: {e}")
         return jsonify({'error': 'Failed to flag alert'}), 500
 
-@app.route('/api/alerts/<int:alert_id>/dismiss', methods=['POST'])
+@app.route('/api/alerts/<alert_id>/dismiss', methods=['POST'])
 @token_required
 @analyst_or_admin_required
 def dismiss_alert(alert_id):
@@ -1165,8 +1482,14 @@ def dismiss_alert(alert_id):
     try:
         username = request.current_user['username']
         
+        # Convert alert_id to integer if it's a string
+        try:
+            alert_id_int = int(alert_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid alert ID format'}), 400
+        
         success, message = dashboard_api.dal.update_alert(
-            alert_id=alert_id,
+            alert_id=alert_id_int,
             updates={
                 'dismissed': True,
                 'status': 'dismissed'
@@ -1182,7 +1505,7 @@ def dismiss_alert(alert_id):
                 ip_address=get_client_info()[0],
                 action="dismiss_alert",
                 success=True,
-                details={'alert_id': alert_id, 'action': 'dismissed'}
+                details={'alert_id': alert_id_int, 'action': 'dismissed'}
             )
             return jsonify({'success': True})
         else:
@@ -1477,8 +1800,9 @@ def get_threat_triage():
         
         # Convert MongoDB objects to JSON-serializable format
         for alert in active_alerts:
-            # Convert ObjectId to string
+            # Convert ObjectId to string and set as id for frontend compatibility
             if '_id' in alert:
+                alert['id'] = str(alert['_id'])
                 alert['_id'] = str(alert['_id'])
             
             # Convert datetime to ISO string
