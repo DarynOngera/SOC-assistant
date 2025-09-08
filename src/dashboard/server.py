@@ -43,6 +43,7 @@ from src.database.schemas import AlertSeverity, AlertStatus, AuditEventType
 from src.database.migration_utils import migrate_existing_data
 from src.auth.mongodb_auth_utils import MongoDBAuthManager, token_required, admin_required, analyst_or_admin_required
 from src.utils.csv_processor import CSVProcessor
+from src.utils.audit_exporter import AuditExporter
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'soc-dashboard-secret-key-change-in-production')
@@ -157,24 +158,63 @@ class MongoDBCompatibleAuditLogger:
             from datetime import datetime, timedelta
             cutoff_date = datetime.now() - timedelta(days=days)
             
-            # Get security-related audit logs
-            security_event_types = ['login_failed', 'unauthorized_access', 'suspicious_activity', 'account_locked']
+            # Get all recent audit logs
+            result = self.dal.get_audit_logs(
+                filters={'timestamp': {'$gte': cutoff_date}}, 
+                page=1, 
+                per_page=10000
+            )
+            records = result.get('logs', [])
             
             security_events = []
-            for event_type in security_event_types:
-                result = self.dal.get_audit_logs(
-                    filters={
+            
+            # Track failed login attempts by user
+            failed_attempts = {}
+            
+            for record in records:
+                event_type = record.get('event_type')
+                username = record.get('username', 'unknown')
+                
+                # Multiple failed login attempts
+                if event_type == 'login_failed':
+                    if username not in failed_attempts:
+                        failed_attempts[username] = []
+                    failed_attempts[username].append(record)
+                
+                # Direct security events
+                elif event_type in ['unauthorized_access', 'account_locked', 'suspicious_activity']:
+                    security_events.append({
+                        'type': 'security_event',
+                        'severity': 'high' if event_type == 'unauthorized_access' else 'medium',
                         'event_type': event_type,
-                        'timestamp': {'$gte': cutoff_date}
-                    }, 
-                    page=1, 
-                    per_page=100
-                )
-                security_events.extend(result.get('logs', []))
+                        'username': username,
+                        'timestamp': record.get('timestamp'),
+                        'details': record.get('details', {}),
+                        'description': f"{event_type.replace('_', ' ').title()} for user {username}"
+                    })
+            
+            # Process failed login attempts
+            for username, attempts in failed_attempts.items():
+                if len(attempts) >= 3:  # Multiple failed attempts
+                    security_events.append({
+                        'type': 'failed_login_pattern',
+                        'severity': 'high' if len(attempts) >= 5 else 'medium',
+                        'event_type': 'multiple_failed_logins',
+                        'username': username,
+                        'timestamp': attempts[-1].get('timestamp'),
+                        'count': len(attempts),
+                        'details': {'attempts': len(attempts), 'timespan': f'{days} days'},
+                        'description': f"Multiple failed login attempts ({len(attempts)}) for user {username}"
+                    })
+            
+            # Sort by timestamp (most recent first)
+            security_events.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
             
             return security_events
         except Exception as e:
             print(f"Error getting security alerts: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def log_event(self, event_type, username, details, ip_address=None, user_agent=None):
@@ -1036,7 +1076,136 @@ def get_audit_summary():
         return jsonify(summary)
         
     except Exception as e:
+        print(f"Error getting audit summary: {e}")
+        traceback.print_exc()
         return jsonify({'error': 'Failed to get audit summary'}), 500
+
+@app.route('/api/admin/audit/export', methods=['GET'])
+@token_required
+@admin_required
+def export_audit_data():
+    """Export audit data in various formats (admin only)"""
+    try:
+        # Initialize audit exporter
+        exporter = AuditExporter(audit_logger)
+        
+        # Get export parameters
+        format_type = request.args.get('format', 'json').lower()
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        event_type = request.args.get('event_type')
+        username = request.args.get('username')
+        severity = request.args.get('severity')
+        include_summary = request.args.get('include_summary', 'true').lower() == 'true'
+        
+        # Validate format
+        if format_type not in ['json', 'csv', 'pdf', 'excel']:
+            return jsonify({'error': 'Invalid format. Supported formats: json, csv, pdf, excel'}), 400
+        
+        # Export data
+        exported_data = exporter.export_audit_data(
+            format_type=format_type,
+            start_date=start_date,
+            end_date=end_date,
+            event_type=event_type,
+            username=username,
+            severity=severity,
+            include_summary=include_summary
+        )
+        
+        # Generate filename
+        filename = exporter.get_export_filename(format_type, start_date, end_date)
+        
+        # Log the export
+        current_username = request.current_user['username']
+        ip_address, user_agent = get_client_info()
+        audit_logger.log_event(
+            event_type='audit_export',
+            username=current_username,
+            details={
+                'format': format_type,
+                'start_date': start_date,
+                'end_date': end_date,
+                'event_type': event_type,
+                'username_filter': username,
+                'severity': severity,
+                'filename': filename
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        
+        # Return appropriate response based on format
+        if format_type == 'json':
+            return jsonify({
+                'success': True,
+                'data': json.loads(exported_data),
+                'filename': filename
+            })
+        elif format_type == 'csv':
+            return send_file(
+                io.BytesIO(exported_data.encode('utf-8')),
+                mimetype='text/csv',
+                as_attachment=True,
+                download_name=filename
+            )
+        elif format_type in ['pdf', 'excel']:
+            mimetype = 'application/pdf' if format_type == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            return send_file(
+                io.BytesIO(exported_data),
+                mimetype=mimetype,
+                as_attachment=True,
+                download_name=filename
+            )
+        
+    except Exception as e:
+        print(f"Error exporting audit data: {e}")
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to export audit data'}), 500
+
+@app.route('/api/admin/audit/export/formats', methods=['GET'])
+@token_required
+@admin_required
+def get_export_formats():
+    """Get available export formats (admin only)"""
+    return jsonify({
+        'formats': [
+            {
+                'value': 'json',
+                'label': 'JSON',
+                'description': 'Structured data format, includes full details',
+                'mime_type': 'application/json'
+            },
+            {
+                'value': 'csv',
+                'label': 'CSV',
+                'description': 'Comma-separated values, good for spreadsheets',
+                'mime_type': 'text/csv'
+            },
+            {
+                'value': 'excel',
+                'label': 'Excel',
+                'description': 'Microsoft Excel format with multiple sheets',
+                'mime_type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            },
+            {
+                'value': 'pdf',
+                'label': 'PDF',
+                'description': 'Portable document format, good for reports',
+                'mime_type': 'application/pdf'
+            }
+        ],
+        'severity_levels': ['high', 'medium', 'low'],
+        'event_types': [
+            'login_success', 'login_failed', 'logout', 'token_refresh',
+            'mfa_setup', 'mfa_enabled', 'mfa_disabled', 'mfa_failed',
+            'user_created', 'user_updated', 'user_deleted', 'password_changed',
+            'account_locked', 'account_unlocked', 'alert_flagged', 'alert_dismissed',
+            'threshold_changed', 'monitoring_started', 'monitoring_stopped',
+            'csv_upload', 'csv_analysis', 'csv_report_generated', 'csv_cleanup',
+            'unauthorized_access', 'permission_denied', 'system_error'
+        ]
+    })
 
 @app.route('/api/admin/security-alerts', methods=['GET'])
 @token_required
@@ -1056,7 +1225,8 @@ def get_security_alerts():
         })
         
     except Exception as e:
-        pass  # Error handled
+        print(f"Error getting security alerts: {e}")
+        traceback.print_exc()
         return jsonify({'error': 'Failed to get security alerts'}), 500
 
 # MongoDB Health Check Endpoint

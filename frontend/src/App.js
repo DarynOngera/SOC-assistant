@@ -11,9 +11,10 @@ import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import MFASetup from './components/MFASetup';
 import AuditLogs from './components/AuditLogs';
+import AuditExport from './components/AuditExport';
 import CSVAnalysis from './components/CSVAnalysis';
 import NetworkMap from './components/NetworkMap';
-import { Shield, Activity, AlertTriangle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target, Network, Menu, X } from 'lucide-react';
+import { Shield, Activity, AlertTriangle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target, Network, Menu, X, Download } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5000';
 

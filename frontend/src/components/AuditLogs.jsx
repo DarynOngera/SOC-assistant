@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Activity, Filter, Download, Calendar, User, AlertTriangle,
-  Shield, Eye, Search, ChevronLeft, ChevronRight
+  Shield, Eye, Search, ChevronLeft, ChevronRight, FileText, Database, FileSpreadsheet, File
 } from 'lucide-react';
 
 const AuditLogs = () => {
@@ -136,6 +136,233 @@ const AuditLogs = () => {
     return colors[severity] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
+  // Export Button Component
+  const ExportButton = ({ filters }) => {
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportFormats, setExportFormats] = useState([]);
+    const [exportConfig, setExportConfig] = useState({
+      format: 'json',
+      severity: '',
+      includeSummary: true
+    });
+    const [exporting, setExporting] = useState(false);
+
+    useEffect(() => {
+      if (showExportModal) {
+        fetchExportFormats();
+      }
+    }, [showExportModal]);
+
+    const fetchExportFormats = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/admin/audit/export/formats', {
+          headers: getAuthHeaders()
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setExportFormats(data.formats || []);
+        }
+      } catch (error) {
+        console.error('Error fetching export formats:', error);
+      }
+    };
+
+    const handleExport = async () => {
+      setExporting(true);
+      try {
+        const params = new URLSearchParams();
+        
+        // Add current filters
+        if (filters.username) params.append('username', filters.username);
+        if (filters.event_type) params.append('event_type', filters.event_type);
+        if (filters.start_date) params.append('start_date', filters.start_date);
+        if (filters.end_date) params.append('end_date', filters.end_date);
+        
+        // Add export config
+        params.append('format', exportConfig.format);
+        if (exportConfig.severity) params.append('severity', exportConfig.severity);
+        params.append('include_summary', exportConfig.includeSummary.toString());
+
+        const response = await fetch(`http://localhost:5000/api/admin/audit/export?${params.toString()}`, {
+          headers: getAuthHeaders()
+        });
+
+        if (response.ok) {
+          if (exportConfig.format === 'json') {
+            const data = await response.json();
+            const blob = new Blob([JSON.stringify(data.data, null, 2)], { 
+              type: 'application/json' 
+            });
+            downloadFile(blob, data.filename);
+          } else {
+            const blob = await response.blob();
+            const filename = response.headers.get('content-disposition')?.split('filename=')[1]?.replace(/"/g, '') || 
+                            `audit_export.${exportConfig.format}`;
+            downloadFile(blob, filename);
+          }
+          setShowExportModal(false);
+        } else {
+          const error = await response.json();
+          alert(`Export failed: ${error.error}`);
+        }
+      } catch (error) {
+        console.error('Export error:', error);
+        alert('Export failed. Please try again.');
+      } finally {
+        setExporting(false);
+      }
+    };
+
+    const downloadFile = (blob, filename) => {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    };
+
+    const getFormatIcon = (format) => {
+      switch (format) {
+        case 'json': return <Database className="w-4 h-4" />;
+        case 'csv': return <FileText className="w-4 h-4" />;
+        case 'excel': return <FileSpreadsheet className="w-4 h-4" />;
+        case 'pdf': return <File className="w-4 h-4" />;
+        default: return <Download className="w-4 h-4" />;
+      }
+    };
+
+    return (
+      <>
+        <button
+          onClick={() => setShowExportModal(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Export Data
+        </button>
+
+        {/* Export Modal */}
+        {showExportModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Export Audit Data</h3>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Format Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Export Format
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {exportFormats.map((format) => (
+                      <button
+                        key={format.value}
+                        onClick={() => setExportConfig(prev => ({ ...prev, format: format.value }))}
+                        className={`p-2 border rounded-lg flex items-center gap-2 text-sm transition-colors ${
+                          exportConfig.format === format.value
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        {getFormatIcon(format.value)}
+                        {format.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Severity Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Severity Filter (Optional)
+                  </label>
+                  <select
+                    value={exportConfig.severity}
+                    onChange={(e) => setExportConfig(prev => ({ ...prev, severity: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Severity Levels</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+
+                {/* Include Summary */}
+                <div>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={exportConfig.includeSummary}
+                      onChange={(e) => setExportConfig(prev => ({ ...prev, includeSummary: e.target.checked }))}
+                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Include summary statistics</span>
+                  </label>
+                </div>
+
+                {/* Current Filters Info */}
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm font-medium text-gray-700 mb-1">Current Filters:</p>
+                  <div className="text-xs text-gray-600 space-y-1">
+                    {filters.username && <p>Username: {filters.username}</p>}
+                    {filters.event_type && <p>Event Type: {filters.event_type}</p>}
+                    {filters.start_date && <p>Start Date: {filters.start_date}</p>}
+                    {filters.end_date && <p>End Date: {filters.end_date}</p>}
+                    {!filters.username && !filters.event_type && !filters.start_date && !filters.end_date && (
+                      <p>No filters applied - exporting all data</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
+                    exporting
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  {exporting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Export
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -147,6 +374,7 @@ const AuditLogs = () => {
           </h2>
           <p className="text-gray-600">Monitor all system activities and security events</p>
         </div>
+        <ExportButton filters={filters} />
       </div>
 
       {/* Summary Cards */}
