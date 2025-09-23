@@ -14,7 +14,7 @@ import AuditLogs from './components/AuditLogs';
 import AuditExport from './components/AuditExport';
 import CSVAnalysis from './components/CSVAnalysis';
 import NetworkMap from './components/NetworkMap';
-import { Shield, Activity, AlertTriangle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target, Network, Menu, X, Download } from 'lucide-react';
+import { Shield, Activity, AlertTriangle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target, Network, Menu, X, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -270,17 +270,23 @@ function App() {
             {/* Mobile close button */}
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600"
+              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200 active:scale-95"
+              aria-label="Close navigation menu"
             >
-              <X className="h-6 w-6" />
+              <X className="h-6 w-6 transition-transform duration-200" />
             </button>
             
             {/* Desktop collapse button */}
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="hidden lg:block p-1 rounded-md text-gray-400 hover:text-gray-600"
+              className="hidden lg:block p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              <Menu className="h-5 w-5" />
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-5 w-5" />
+              ) : (
+                <ChevronLeft className="h-5 w-5" />
+              )}
             </button>
           </div>
 
@@ -367,9 +373,12 @@ function App() {
         <div className="flex items-center justify-between h-16 px-4">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+            className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 active:scale-95"
+            aria-label="Open navigation menu"
           >
-            <Menu className="h-6 w-6" />
+            <div className="relative">
+              <Menu className="h-6 w-6 transition-transform duration-200" />
+            </div>
           </button>
           
           <div className="flex items-center">
