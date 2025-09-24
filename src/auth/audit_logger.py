@@ -215,10 +215,15 @@ class AuditLogger:
         """Get audit summary for the last N days"""
         
         try:
+            from datetime import datetime, timedelta
             # Calculate start date
             start_date = (datetime.utcnow() - timedelta(days=days)).isoformat() + 'Z'
             
-            records = self.get_audit_logs(start_date=start_date, limit=10000)
+            records = self.get_audit_logs(start_date=start_date, per_page=10000)
+            
+            # Handle both dict and list return types from get_audit_logs
+            if isinstance(records, dict):
+                records = records.get('logs', [])
             
             # Count events by type
             event_counts = {}
@@ -263,13 +268,18 @@ class AuditLogger:
         """Get security-related events that may require attention"""
         
         try:
+            from datetime import datetime, timedelta
             start_date = (datetime.utcnow() - timedelta(days=days)).isoformat() + 'Z'
-            records = self.get_audit_logs(start_date=start_date, limit=10000)
+            records = self.get_audit_logs(start_date=start_date, per_page=10000)
             
             security_events = []
             
             # Track failed login attempts by user
             failed_attempts = {}
+            
+            # Handle both dict and list return types from get_audit_logs
+            if isinstance(records, dict):
+                records = records.get('logs', [])
             
             for record in records:
                 event_type = record.get('event_type')

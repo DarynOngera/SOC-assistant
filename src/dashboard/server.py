@@ -35,14 +35,15 @@ import uuid
 
 # Add project root to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-\
-from src.auth.auth_utils import AuthManager, token_required, admin_required, analyst_or_admin_required
-from src.auth.audit_logger import (
-    AuditLogger, AuditEventType, log_login_success, log_login_failed, log_logout, log_user_created,
-    log_user_updated, log_user_deleted, log_alert_action, log_threshold_change,
-    log_monitoring_control, log_unauthorized_access, audit_logger
-)
+
+# MongoDB imports
+from src.database.mongodb_config import initialize_mongodb, mongodb_health_check
+from src.database.mongodb_dal import get_dal
+from src.database.schemas import AlertSeverity, AlertStatus, AuditEventType
+from src.database.migration_utils import migrate_existing_data
+from src.auth.mongodb_auth_utils import MongoDBAuthManager, token_required, admin_required, analyst_or_admin_required
 from src.utils.csv_processor import CSVProcessor
+from src.utils.audit_exporter import AuditExporter
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'soc-dashboard-secret-key-change-in-production')
@@ -56,9 +57,181 @@ limiter = Limiter(
     default_limits=["1000 per hour"]
 )
 
-# Initialize auth manager and audit logger
-auth_manager = AuthManager()
-audit_logger = AuditLogger(log_file="src/dashboard/data/audit.log", json_file="src/dashboard/data/audit.json")
+# Initialize MongoDB and auth manager
+try:
+    # Initialize MongoDB connection and indexes
+    if initialize_mongodb():
+        print("✓ MongoDB initialized successfully")
+        
+        # Run data migration if needed
+        migration_results = migrate_existing_data()
+        if migration_results.get('error'):
+            print(f"⚠ Migration warning: {migration_results['error']}")
+        else:
+            print("✓ Data migration completed")
+    else:
+        print("⚠ MongoDB initialization failed, some features may not work")
+except Exception as e:
+    print(f"⚠ MongoDB setup error: {e}")
+
+# Initialize auth manager with MongoDB backend
+auth_manager = MongoDBAuthManager()
+
+# Initialize MongoDB DAL
+mongodb_dal = get_dal()
+
+# Initialize audit logger using MongoDB DAL
+class MongoDBCompatibleAuditLogger:
+    """Audit logger that works with MongoDB DAL"""
+    def __init__(self, dal):
+        self.dal = dal
+    
+    def get_audit_logs(self, page=1, per_page=50, event_type=None, username=None, start_date=None, end_date=None):
+        """Get audit logs with filtering"""
+        try:
+            filters = {}
+            if event_type:
+                filters['event_type'] = event_type
+            if username:
+                filters['username'] = username
+            if start_date:
+                # Parse date string if needed
+                if isinstance(start_date, str):
+                    from datetime import datetime
+                    start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                filters['timestamp'] = {'$gte': start_date}
+            if end_date:
+                # Parse date string if needed
+                if isinstance(end_date, str):
+                    from datetime import datetime
+                    end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                if 'timestamp' not in filters:
+                    filters['timestamp'] = {}
+                filters['timestamp']['$lte'] = end_date
+            
+            result = self.dal.get_audit_logs(filters=filters, page=page, per_page=per_page)
+            return result
+        except Exception as e:
+            print(f"Error getting audit logs: {e}")
+            return {'logs': [], 'total': 0, 'page': page, 'per_page': per_page}
+    
+    def get_audit_summary(self, days=30):
+        """Get audit summary"""
+        try:
+            from datetime import datetime, timedelta
+            cutoff_date = datetime.now() - timedelta(days=days)
+            
+            # Get recent audit logs
+            result = self.dal.get_audit_logs(
+                filters={'timestamp': {'$gte': cutoff_date}}, 
+                page=1, 
+                per_page=1000
+            )
+            logs = result.get('logs', [])
+            
+            # Calculate summary statistics
+            total_events = len(logs)
+            event_types = {}
+            users = {}
+            
+            for log in logs:
+                event_type = log.get('event_type', 'unknown')
+                username = log.get('username', 'unknown')
+                
+                event_types[event_type] = event_types.get(event_type, 0) + 1
+                users[username] = users.get(username, 0) + 1
+            
+            return {
+                'total_events': total_events,
+                'event_types': event_types,
+                'active_users': len(users),
+                'top_users': dict(sorted(users.items(), key=lambda x: x[1], reverse=True)[:10]),
+                'days': days
+            }
+        except Exception as e:
+            print(f"Error getting audit summary: {e}")
+            return {'total_events': 0, 'event_types': {}, 'active_users': 0, 'top_users': {}, 'days': days}
+    
+    def get_security_alerts(self, days=7):
+        """Get security-related events"""
+        try:
+            from datetime import datetime, timedelta
+            cutoff_date = datetime.now() - timedelta(days=days)
+            
+            # Get all recent audit logs
+            result = self.dal.get_audit_logs(
+                filters={'timestamp': {'$gte': cutoff_date}}, 
+                page=1, 
+                per_page=10000
+            )
+            records = result.get('logs', [])
+            
+            security_events = []
+            
+            # Track failed login attempts by user
+            failed_attempts = {}
+            
+            for record in records:
+                event_type = record.get('event_type')
+                username = record.get('username', 'unknown')
+                
+                # Multiple failed login attempts
+                if event_type == 'login_failed':
+                    if username not in failed_attempts:
+                        failed_attempts[username] = []
+                    failed_attempts[username].append(record)
+                
+                # Direct security events
+                elif event_type in ['unauthorized_access', 'account_locked', 'suspicious_activity']:
+                    security_events.append({
+                        'type': 'security_event',
+                        'severity': 'high' if event_type == 'unauthorized_access' else 'medium',
+                        'event_type': event_type,
+                        'username': username,
+                        'timestamp': record.get('timestamp'),
+                        'details': record.get('details', {}),
+                        'description': f"{event_type.replace('_', ' ').title()} for user {username}"
+                    })
+            
+            # Process failed login attempts
+            for username, attempts in failed_attempts.items():
+                if len(attempts) >= 3:  # Multiple failed attempts
+                    security_events.append({
+                        'type': 'failed_login_pattern',
+                        'severity': 'high' if len(attempts) >= 5 else 'medium',
+                        'event_type': 'multiple_failed_logins',
+                        'username': username,
+                        'timestamp': attempts[-1].get('timestamp'),
+                        'count': len(attempts),
+                        'details': {'attempts': len(attempts), 'timespan': f'{days} days'},
+                        'description': f"Multiple failed login attempts ({len(attempts)}) for user {username}"
+                    })
+            
+            # Sort by timestamp (most recent first)
+            security_events.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            
+            return security_events
+        except Exception as e:
+            print(f"Error getting security alerts: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def log_event(self, event_type, username, details, ip_address=None, user_agent=None):
+        """Log an audit event"""
+        try:
+            self.dal.create_audit_log(
+                event_type=event_type.value if hasattr(event_type, 'value') else str(event_type),
+                username=username,
+                ip_address=ip_address or 'unknown',
+                action=details.get('action', 'unknown'),
+                success=details.get('success', True),
+                details=details
+            )
+        except Exception as e:
+            print(f"Error logging audit event: {e}")
+
+audit_logger = MongoDBCompatibleAuditLogger(mongodb_dal)
 
 # Attach auth manager to Flask app for decorator access
 app.auth_manager = auth_manager
@@ -69,21 +242,76 @@ def get_client_info():
     user_agent = request.headers.get('User-Agent', '')
     return ip_address, user_agent
 
+# Audit logging helper functions
+def log_login_success(username, ip_address, user_agent):
+    """Log successful login"""
+    audit_logger.log_event(
+        event_type='login_success',
+        username=username,
+        details={'action': 'login', 'status': 'success'},
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+
+def log_login_failed(username, ip_address, user_agent, reason):
+    """Log failed login attempt"""
+    audit_logger.log_event(
+        event_type='login_failed',
+        username=username,
+        details={'action': 'login', 'status': 'failed', 'reason': reason},
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+
+def log_logout(username, ip_address):
+    """Log user logout"""
+    audit_logger.log_event(
+        event_type='logout',
+        username=username,
+        details={'action': 'logout'},
+        ip_address=ip_address
+    )
+
+def log_user_created(admin_username, new_username, ip_address, user_agent):
+    """Log user creation"""
+    audit_logger.log_event(
+        event_type='user_created',
+        username=admin_username,
+        details={'action': 'create_user', 'target_user': new_username},
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+
+def log_user_updated(admin_username, target_username, ip_address, user_agent, updated_fields):
+    """Log user update"""
+    audit_logger.log_event(
+        event_type='user_updated',
+        username=admin_username,
+        details={'action': 'update_user', 'target_user': target_username, 'updated_fields': updated_fields},
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+
+def log_user_deleted(admin_username, deleted_username, ip_address, user_agent):
+    """Log user deletion"""
+    audit_logger.log_event(
+        event_type='user_deleted',
+        username=admin_username,
+        details={'action': 'delete_user', 'target_user': deleted_username},
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+
 class SOCDashboardAPI:
     def __init__(self):
         self.detector = None
-        self.current_alerts = []
-        self.alert_history = []
-        self.system_stats = {
-            'total_processed': 0,
-            'anomalies_detected': 0,
-            'false_positives': 0,
-            'system_health': 'healthy'
-        }
+        self.dal = get_dal()
         self.threshold = 0.5
         self.is_monitoring = False
-        self.next_alert_id = int(time.time() * 1000)  # Start with timestamp-based ID for uniqueness
         self.load_models()
+        
+        # Initialize system stats in MongoDB if not exists
+        self._initialize_system_stats()
         
     def load_models(self):
         """Load the latest trained models"""
@@ -102,6 +330,37 @@ class SOCDashboardAPI:
         except Exception as e:
             print(f"✗ Error loading models: {e}")
             self.detector = None
+    
+    def _initialize_system_stats(self):
+        """Initialize system statistics in MongoDB if they don't exist"""
+        try:
+            # Check if system stats exist
+            existing_stats = self.dal.get_latest_system_stats("realtime")
+            
+            if not existing_stats:
+                # Create initial system stats
+                initial_stats = {
+                    'total_processed': 0,
+                    'anomalies_detected': 0,
+                    'total_alerts': 0,
+                    'active_alerts': 0,
+                    'system_health': 'healthy',
+                    'detection_threshold': self.threshold,
+                    'severity_distribution': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0},
+                    'detection_rate': 0.0,
+                    'uptime_hours': 0.0,
+                    'last_alert_time': None
+                }
+                
+                # Save initial stats to MongoDB
+                self.dal.save_system_stats("realtime", initial_stats)
+                print("✓ System statistics initialized in MongoDB")
+            else:
+                print("✓ System statistics found in MongoDB")
+                
+        except Exception as e:
+            print(f"⚠ Error initializing system stats: {e}")
+            # Continue without failing - stats will be created on first update
     
     def generate_realistic_network_data(self, batch_size=10):
         """Generate realistic network traffic data using model's feature template (network traffic only)"""
@@ -287,43 +546,56 @@ class SOCDashboardAPI:
         return processed_data
     
     def process_alerts(self, data_batch):
-        """Process new data and generate alerts"""
+        """Process new data and generate alerts using MongoDB storage"""
         new_alerts = []
         
         for record in data_batch:
-            # Generate alert if anomaly score exceeds threshold (regardless of prediction value)
+            # Generate alert if anomaly score exceeds threshold
             if record['anomaly_score'] > self.threshold:
-                alert = {
-                    'id': self.next_alert_id,
-                    'timestamp': record['timestamp'].isoformat(),
+                alert_data = {
+                    'timestamp': record['timestamp'],
                     'severity': self.get_severity(record['anomaly_score']),
                     'source_ip': str(record['src_ip']),
                     'destination_ip': str(record['dst_ip']),
                     'attack_type': str(record['attack_type']),
                     'anomaly_score': float(round(record['anomaly_score'], 3)),
                     'confidence': float(round(record['confidence'], 3)),
-                    'status': 'new',
-                    'flagged': False,
-                    'dismissed': False,
                     'protocol': str(record['proto']),
-                    'src_port': int(record['src_port']),
-                    'dst_port': int(record['dst_port'])
+                    'source_port': int(record['src_port']),
+                    'destination_port': int(record['dst_port']),
+                    'status': AlertStatus.NEW.value,
+                    'flagged': False,
+                    'dismissed': False
                 }
-                new_alerts.append(alert)
-                self.next_alert_id += 1  # Increment ID counter
-                pass  # Alert generated silently
+                
+                # Save alert to MongoDB
+                try:
+                    success, message, alert_id = self.dal.create_alert(alert_data)
+                    if success:
+                        # Get the latest alert ID to retrieve the created alert
+                        latest_alert = self.dal.db.alerts.find_one({}, sort=[("alert_id", -1)])
+                        if latest_alert:
+                            new_alerts.append(latest_alert)
+                except Exception as e:
+                    print(f"Error saving alert to MongoDB: {e}")
         
-        # Add to current alerts and history
-        self.current_alerts.extend(new_alerts)
-        self.alert_history.extend(new_alerts)
-        
-        # Keep only recent alerts in current (last 100)
-        if len(self.current_alerts) > 100:
-            self.current_alerts = self.current_alerts[-100:]
-        
-        # Update system stats
-        self.system_stats['total_processed'] += len(data_batch)
-        self.system_stats['anomalies_detected'] += len(new_alerts)
+        # Update system stats in MongoDB
+        try:
+            current_stats = self.dal.get_latest_system_stats("realtime")
+            if current_stats:
+                updated_stats = {
+                    'total_processed': current_stats.get('total_processed', 0) + len(data_batch),
+                    'anomalies_detected': current_stats.get('anomalies_detected', 0) + len(new_alerts),
+                    'total_alerts': current_stats.get('total_alerts', 0) + len(new_alerts),
+                    'active_alerts': self.get_active_alerts_count(),
+                    'system_health': 'healthy',
+                    'detection_threshold': self.threshold,
+                    'severity_distribution': self.get_severity_distribution(),
+                    'detection_rate': self.calculate_detection_rate()
+                }
+                self.dal.save_system_stats("realtime", updated_stats)
+        except Exception as e:
+            print(f"Error updating system stats: {e}")
         
         return new_alerts
     
@@ -373,25 +645,74 @@ class SOCDashboardAPI:
         self.is_monitoring = False
         pass  # Monitoring stopped
     
+    def get_active_alerts_count(self):
+        """Get count of active alerts from MongoDB"""
+        try:
+            result = self.dal.get_alerts(filters={'status': {'$ne': 'resolved'}}, per_page=1)
+            return result.get('total', 0)
+        except:
+            return 0
+    
+    def get_severity_distribution(self):
+        """Get severity distribution from recent alerts"""
+        try:
+            stats = self.dal.get_alert_statistics(hours=1)
+            return stats.get('severity_distribution', {'critical': 0, 'high': 0, 'medium': 0, 'low': 0})
+        except:
+            return {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+    
+    def calculate_detection_rate(self):
+        """Calculate current detection rate"""
+        try:
+            current_stats = self.dal.get_latest_system_stats("realtime")
+            if current_stats:
+                total_processed = current_stats.get('total_processed', 0)
+                anomalies_detected = current_stats.get('anomalies_detected', 0)
+                return round((anomalies_detected / max(1, total_processed)) * 100, 2)
+            return 0.0
+        except:
+            return 0.0
+    
     def get_system_stats(self):
-        """Get current system statistics"""
-        recent_alerts = [a for a in self.current_alerts if 
-                        datetime.fromisoformat(a['timestamp']) > datetime.now() - timedelta(hours=1)]
-        
-        severity_counts = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
-        for alert in recent_alerts:
-            severity_counts[alert['severity']] += 1
-        
-        return {
-            'total_processed': self.system_stats['total_processed'],
-            'anomalies_detected': len(recent_alerts),
-            'total_alerts': len(self.alert_history),
-            'active_alerts': len([a for a in self.current_alerts if a['status'] == 'new']),
-            'system_health': self.system_stats['system_health'],
-            'threshold': self.threshold,
-            'severity_distribution': severity_counts,
-            'detection_rate': round((len(recent_alerts) / max(1, self.system_stats['total_processed'])) * 100, 2)
-        }
+        """Get current system statistics from MongoDB"""
+        try:
+            # Get latest stats from MongoDB
+            current_stats = self.dal.get_latest_system_stats("realtime")
+            if current_stats:
+                return {
+                    'total_processed': current_stats.get('total_processed', 0),
+                    'anomalies_detected': current_stats.get('anomalies_detected', 0),
+                    'total_alerts': current_stats.get('total_alerts', 0),
+                    'active_alerts': self.get_active_alerts_count(),
+                    'system_health': current_stats.get('system_health', 'healthy'),
+                    'threshold': self.threshold,
+                    'severity_distribution': self.get_severity_distribution(),
+                    'detection_rate': self.calculate_detection_rate()
+                }
+            else:
+                # Fallback stats
+                return {
+                    'total_processed': 0,
+                    'anomalies_detected': 0,
+                    'total_alerts': 0,
+                    'active_alerts': 0,
+                    'system_health': 'healthy',
+                    'threshold': self.threshold,
+                    'severity_distribution': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0},
+                    'detection_rate': 0.0
+                }
+        except Exception as e:
+            print(f"Error getting system stats: {e}")
+            return {
+                'total_processed': 0,
+                'anomalies_detected': 0,
+                'total_alerts': 0,
+                'active_alerts': 0,
+                'system_health': 'unhealthy',
+                'threshold': self.threshold,
+                'severity_distribution': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0},
+                'detection_rate': 0.0
+            }
 
 # Initialize dashboard API
 dashboard_api = SOCDashboardAPI()
@@ -404,6 +725,32 @@ csv_processor = CSVProcessor(
 )
 
 # Authentication endpoints
+@app.route('/api/auth/check-mfa', methods=['POST'])
+@limiter.limit("10 per minute")
+def check_mfa_requirement():
+    """Check if user requires MFA without authenticating"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        
+        if not username:
+            return jsonify({'error': 'Username required'}), 400
+        
+        # Get user info without authentication
+        user = mongodb_dal.get_user_by_username(username)
+        if not user:
+            # Don't reveal if user exists or not for security
+            return jsonify({'mfa_required': False}), 200
+        
+        # Check if MFA is enabled for this user
+        mfa_required = user.get('mfa_enabled', False) and user.get('mfa_secret')
+        
+        return jsonify({'mfa_required': bool(mfa_required)}), 200
+        
+    except Exception as e:
+        print(f"Error checking MFA requirement: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
 @app.route('/api/auth/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def login():
@@ -587,6 +934,7 @@ def disable_mfa():
         return jsonify({'message': message})
         
     except Exception as e:
+        print(f"Error disabling MFA: {e}")
         return jsonify({'error': 'MFA disable failed'}), 500
 
 # Admin user management endpoints
@@ -699,9 +1047,23 @@ def get_audit_logs():
             end_date=end_date
         )
         
+        # Convert MongoDB objects to JSON-serializable format
+        if 'logs' in logs:
+            for log in logs['logs']:
+                # Convert ObjectId to string
+                if '_id' in log:
+                    log['_id'] = str(log['_id'])
+                
+                # Convert datetime to ISO string
+                if 'timestamp' in log and hasattr(log['timestamp'], 'isoformat'):
+                    log['timestamp'] = log['timestamp'].isoformat()
+        
         return jsonify(logs)
         
     except Exception as e:
+        print(f"Error in audit logs endpoint: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to get audit logs'}), 500
 
 @app.route('/api/admin/audit/summary', methods=['GET'])
@@ -714,7 +1076,136 @@ def get_audit_summary():
         return jsonify(summary)
         
     except Exception as e:
+        print(f"Error getting audit summary: {e}")
+        traceback.print_exc()
         return jsonify({'error': 'Failed to get audit summary'}), 500
+
+@app.route('/api/admin/audit/export', methods=['GET'])
+@token_required
+@admin_required
+def export_audit_data():
+    """Export audit data in various formats (admin only)"""
+    try:
+        # Initialize audit exporter
+        exporter = AuditExporter(audit_logger)
+        
+        # Get export parameters
+        format_type = request.args.get('format', 'json').lower()
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        event_type = request.args.get('event_type')
+        username = request.args.get('username')
+        severity = request.args.get('severity')
+        include_summary = request.args.get('include_summary', 'true').lower() == 'true'
+        
+        # Validate format
+        if format_type not in ['json', 'csv', 'pdf', 'excel']:
+            return jsonify({'error': 'Invalid format. Supported formats: json, csv, pdf, excel'}), 400
+        
+        # Export data
+        exported_data = exporter.export_audit_data(
+            format_type=format_type,
+            start_date=start_date,
+            end_date=end_date,
+            event_type=event_type,
+            username=username,
+            severity=severity,
+            include_summary=include_summary
+        )
+        
+        # Generate filename
+        filename = exporter.get_export_filename(format_type, start_date, end_date)
+        
+        # Log the export
+        current_username = request.current_user['username']
+        ip_address, user_agent = get_client_info()
+        audit_logger.log_event(
+            event_type='audit_export',
+            username=current_username,
+            details={
+                'format': format_type,
+                'start_date': start_date,
+                'end_date': end_date,
+                'event_type': event_type,
+                'username_filter': username,
+                'severity': severity,
+                'filename': filename
+            },
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        
+        # Return appropriate response based on format
+        if format_type == 'json':
+            return jsonify({
+                'success': True,
+                'data': json.loads(exported_data),
+                'filename': filename
+            })
+        elif format_type == 'csv':
+            return send_file(
+                io.BytesIO(exported_data.encode('utf-8')),
+                mimetype='text/csv',
+                as_attachment=True,
+                download_name=filename
+            )
+        elif format_type in ['pdf', 'excel']:
+            mimetype = 'application/pdf' if format_type == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            return send_file(
+                io.BytesIO(exported_data),
+                mimetype=mimetype,
+                as_attachment=True,
+                download_name=filename
+            )
+        
+    except Exception as e:
+        print(f"Error exporting audit data: {e}")
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to export audit data'}), 500
+
+@app.route('/api/admin/audit/export/formats', methods=['GET'])
+@token_required
+@admin_required
+def get_export_formats():
+    """Get available export formats (admin only)"""
+    return jsonify({
+        'formats': [
+            {
+                'value': 'json',
+                'label': 'JSON',
+                'description': 'Structured data format, includes full details',
+                'mime_type': 'application/json'
+            },
+            {
+                'value': 'csv',
+                'label': 'CSV',
+                'description': 'Comma-separated values, good for spreadsheets',
+                'mime_type': 'text/csv'
+            },
+            {
+                'value': 'excel',
+                'label': 'Excel',
+                'description': 'Microsoft Excel format with multiple sheets',
+                'mime_type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            },
+            {
+                'value': 'pdf',
+                'label': 'PDF',
+                'description': 'Portable document format, good for reports',
+                'mime_type': 'application/pdf'
+            }
+        ],
+        'severity_levels': ['high', 'medium', 'low'],
+        'event_types': [
+            'login_success', 'login_failed', 'logout', 'token_refresh',
+            'mfa_setup', 'mfa_enabled', 'mfa_disabled', 'mfa_failed',
+            'user_created', 'user_updated', 'user_deleted', 'password_changed',
+            'account_locked', 'account_unlocked', 'alert_flagged', 'alert_dismissed',
+            'threshold_changed', 'monitoring_started', 'monitoring_stopped',
+            'csv_upload', 'csv_analysis', 'csv_report_generated', 'csv_cleanup',
+            'unauthorized_access', 'permission_denied', 'system_error'
+        ]
+    })
 
 @app.route('/api/admin/security-alerts', methods=['GET'])
 @token_required
@@ -734,43 +1225,360 @@ def get_security_alerts():
         })
         
     except Exception as e:
-        pass  # Error handled
+        print(f"Error getting security alerts: {e}")
+        traceback.print_exc()
         return jsonify({'error': 'Failed to get security alerts'}), 500
+
+# MongoDB Health Check Endpoint
+@app.route('/api/health/mongodb')
+@token_required
+@admin_required
+def mongodb_health():
+    """Get MongoDB health status"""
+    try:
+        health_status = mongodb_health_check()
+        return jsonify(health_status)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+@app.route('/api/health/database-stats')
+@token_required
+@admin_required
+def database_stats():
+    """Get database collection statistics"""
+    try:
+        stats = dashboard_api.dal.get_collection_stats()
+        return jsonify({
+            'status': 'success',
+            'collections': stats,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+# Network topology endpoints
+@app.route('/api/network/topology')
+@token_required
+@analyst_or_admin_required
+def get_network_topology():
+    """Get network topology data for visualization"""
+    try:
+        # Get recent alerts for network analysis
+        alerts_data = mongodb_dal.get_alerts(per_page=500)
+        alerts = alerts_data.get('alerts', [])
+        
+        # Build network topology from alerts
+        nodes = {}
+        edges = []
+        subnets = {}
+        
+        for alert in alerts:
+            src_ip = alert.get('source_ip')
+            dst_ip = alert.get('destination_ip')
+            
+            if not src_ip or not dst_ip:
+                continue
+                
+            # Classify IP addresses by subnet
+            src_subnet = get_subnet(src_ip)
+            dst_subnet = get_subnet(dst_ip)
+            
+            # Add nodes
+            if src_ip not in nodes:
+                nodes[src_ip] = {
+                    'id': src_ip,
+                    'ip': src_ip,
+                    'subnet': src_subnet,
+                    'type': classify_ip_type(src_ip),
+                    'alert_count': 0,
+                    'severity_counts': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0},
+                    'attack_types': set(),
+                    'ports': set()
+                }
+            
+            if dst_ip not in nodes:
+                nodes[dst_ip] = {
+                    'id': dst_ip,
+                    'ip': dst_ip,
+                    'subnet': dst_subnet,
+                    'type': classify_ip_type(dst_ip),
+                    'alert_count': 0,
+                    'severity_counts': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0},
+                    'attack_types': set(),
+                    'ports': set()
+                }
+            
+            # Update node statistics
+            severity = alert.get('severity', 'low').lower()
+            attack_type = alert.get('attack_type', 'Unknown')
+            
+            nodes[src_ip]['alert_count'] += 1
+            nodes[src_ip]['severity_counts'][severity] += 1
+            nodes[src_ip]['attack_types'].add(attack_type)
+            
+            nodes[dst_ip]['alert_count'] += 1
+            nodes[dst_ip]['severity_counts'][severity] += 1
+            nodes[dst_ip]['attack_types'].add(attack_type)
+            
+            # Add ports if available
+            if alert.get('source_port'):
+                nodes[src_ip]['ports'].add(alert['source_port'])
+            if alert.get('destination_port'):
+                nodes[dst_ip]['ports'].add(alert['destination_port'])
+            
+            # Add edge
+            edge_id = f"{src_ip}->{dst_ip}"
+            edge_exists = False
+            for edge in edges:
+                if edge['id'] == edge_id:
+                    edge['weight'] += 1
+                    edge['alerts'].append({
+                        'timestamp': alert.get('timestamp'),
+                        'severity': severity,
+                        'attack_type': attack_type,
+                        'score': alert.get('anomaly_score', 0)
+                    })
+                    edge_exists = True
+                    break
+            
+            if not edge_exists:
+                edges.append({
+                    'id': edge_id,
+                    'source': src_ip,
+                    'target': dst_ip,
+                    'weight': 1,
+                    'alerts': [{
+                        'timestamp': alert.get('timestamp'),
+                        'severity': severity,
+                        'attack_type': attack_type,
+                        'score': alert.get('anomaly_score', 0)
+                    }]
+                })
+            
+            # Track subnets
+            if src_subnet not in subnets:
+                subnets[src_subnet] = {'ips': set(), 'alert_count': 0}
+            if dst_subnet not in subnets:
+                subnets[dst_subnet] = {'ips': set(), 'alert_count': 0}
+            
+            subnets[src_subnet]['ips'].add(src_ip)
+            subnets[dst_subnet]['ips'].add(dst_ip)
+            subnets[src_subnet]['alert_count'] += 1
+            subnets[dst_subnet]['alert_count'] += 1
+        
+        # Convert sets to lists for JSON serialization
+        for node in nodes.values():
+            node['attack_types'] = list(node['attack_types'])
+            node['ports'] = list(node['ports'])
+        
+        # Convert subnet data
+        subnet_data = []
+        for subnet, data in subnets.items():
+            subnet_data.append({
+                'subnet': subnet,
+                'ip_count': len(data['ips']),
+                'alert_count': data['alert_count'],
+                'ips': list(data['ips'])
+            })
+        
+        return jsonify({
+            'nodes': list(nodes.values()),
+            'edges': edges,
+            'subnets': subnet_data,
+            'stats': {
+                'total_nodes': len(nodes),
+                'total_edges': len(edges),
+                'total_subnets': len(subnets)
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error getting network topology: {e}")
+        return jsonify({'error': 'Failed to get network topology'}), 500
+
+def get_subnet(ip):
+    """Get subnet classification for IP address"""
+    try:
+        parts = ip.split('.')
+        if len(parts) != 4:
+            return 'unknown'
+        
+        first_octet = int(parts[0])
+        second_octet = int(parts[1])
+        
+        if first_octet == 192 and second_octet == 168:
+            return f"192.168.{parts[2]}.0/24"
+        elif first_octet == 10:
+            return f"10.{parts[1]}.0.0/16"
+        elif first_octet == 172 and 16 <= second_octet <= 31:
+            return f"172.{parts[1]}.0.0/16"
+        elif first_octet in [127]:
+            return "localhost"
+        else:
+            return f"{parts[0]}.{parts[1]}.0.0/16"
+    except:
+        return 'unknown'
+
+def classify_ip_type(ip):
+    """Classify IP address type"""
+    try:
+        parts = ip.split('.')
+        if len(parts) != 4:
+            return 'unknown'
+        
+        first_octet = int(parts[0])
+        second_octet = int(parts[1])
+        
+        if first_octet == 192 and second_octet == 168:
+            return 'internal'
+        elif first_octet == 10:
+            return 'internal'
+        elif first_octet == 172 and 16 <= second_octet <= 31:
+            return 'internal'
+        elif first_octet == 127:
+            return 'localhost'
+        else:
+            return 'external'
+    except:
+        return 'unknown'
+
+@app.route('/api/network/connections')
+@token_required
+@analyst_or_admin_required
+def get_network_connections():
+    """Get active network connections"""
+    try:
+        time_filter = request.args.get('timeframe', '1h')
+        
+        # Calculate time threshold
+        now = datetime.utcnow()
+        if time_filter == '1h':
+            threshold = now - timedelta(hours=1)
+        elif time_filter == '24h':
+            threshold = now - timedelta(hours=24)
+        elif time_filter == '7d':
+            threshold = now - timedelta(days=7)
+        else:
+            threshold = now - timedelta(hours=1)
+        
+        # Get recent alerts
+        alerts_data = mongodb_dal.get_alerts(per_page=1000)
+        alerts = alerts_data.get('alerts', [])
+        recent_alerts = [a for a in alerts if a.get('timestamp', now) >= threshold]
+        
+        # Analyze connections
+        connections = {}
+        for alert in recent_alerts:
+            src_ip = alert.get('source_ip')
+            dst_ip = alert.get('destination_ip')
+            src_port = alert.get('source_port', 0)
+            dst_port = alert.get('destination_port', 0)
+            
+            if not src_ip or not dst_ip:
+                continue
+            
+            conn_key = f"{src_ip}:{src_port}->{dst_ip}:{dst_port}"
+            
+            if conn_key not in connections:
+                connections[conn_key] = {
+                    'source_ip': src_ip,
+                    'destination_ip': dst_ip,
+                    'source_port': src_port,
+                    'destination_port': dst_port,
+                    'connection_count': 0,
+                    'total_score': 0,
+                    'max_score': 0,
+                    'attack_types': set(),
+                    'severities': set(),
+                    'first_seen': alert.get('timestamp'),
+                    'last_seen': alert.get('timestamp')
+                }
+            
+            conn = connections[conn_key]
+            conn['connection_count'] += 1
+            conn['total_score'] += alert.get('anomaly_score', 0)
+            conn['max_score'] = max(conn['max_score'], alert.get('anomaly_score', 0))
+            conn['attack_types'].add(alert.get('attack_type', 'Unknown'))
+            conn['severities'].add(alert.get('severity', 'low'))
+            
+            # Update timestamps
+            alert_time = alert.get('timestamp')
+            if alert_time:
+                if conn['first_seen'] is None or alert_time < conn['first_seen']:
+                    conn['first_seen'] = alert_time
+                if conn['last_seen'] is None or alert_time > conn['last_seen']:
+                    conn['last_seen'] = alert_time
+        
+        # Convert to list and calculate averages
+        connection_list = []
+        for conn in connections.values():
+            conn['avg_score'] = conn['total_score'] / conn['connection_count'] if conn['connection_count'] > 0 else 0
+            conn['attack_types'] = list(conn['attack_types'])
+            conn['severities'] = list(conn['severities'])
+            connection_list.append(conn)
+        
+        # Sort by connection count and score
+        connection_list.sort(key=lambda x: (x['connection_count'], x['max_score']), reverse=True)
+        
+        return jsonify({
+            'connections': connection_list[:100],  # Limit to top 100
+            'timeframe': time_filter,
+            'total_connections': len(connection_list)
+        })
+        
+    except Exception as e:
+        print(f"Error getting network connections: {e}")
+        return jsonify({'error': 'Failed to get network connections'}), 500
 
 # SOC Dashboard Routes (with authentication)
 @app.route('/api/alerts')
 @token_required
 @analyst_or_admin_required
 def get_alerts():
-    """Get alerts with filtering and pagination"""
-    page = int(request.args.get('page', 1))
-    per_page = int(request.args.get('per_page', 20))
-    severity = request.args.get('severity')
-    status = request.args.get('status')
-    
-    alerts = dashboard_api.current_alerts.copy()
-    
-    # Apply filters
-    if severity:
-        alerts = [a for a in alerts if a['severity'] == severity]
-    if status:
-        alerts = [a for a in alerts if a['status'] == status]
-    
-    # Sort by timestamp (newest first)
-    alerts.sort(key=lambda x: x['timestamp'], reverse=True)
-    
-    # Pagination
-    start = (page - 1) * per_page
-    end = start + per_page
-    paginated_alerts = alerts[start:end]
-    
-    return jsonify({
-        'alerts': paginated_alerts,
-        'total': len(alerts),
-        'page': page,
-        'per_page': per_page,
-        'total_pages': (len(alerts) + per_page - 1) // per_page
-    })
+    """Get alerts with filtering and pagination from MongoDB"""
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+        severity = request.args.get('severity')
+        status = request.args.get('status')
+        
+        # Build MongoDB filters
+        filters = {}
+        if severity:
+            filters['severity'] = severity
+        if status:
+            filters['status'] = status
+        
+        # Get alerts from MongoDB
+        result = dashboard_api.dal.get_alerts(
+            filters=filters,
+            page=page,
+            per_page=per_page,
+            sort_by="timestamp",
+            sort_order=-1  # Newest first
+        )
+        
+        # Convert ObjectId to string for JSON serialization
+        for alert in result['alerts']:
+            if '_id' in alert:
+                alert['_id'] = str(alert['_id'])
+            # Convert datetime to ISO string if needed
+            if 'timestamp' in alert and hasattr(alert['timestamp'], 'isoformat'):
+                alert['timestamp'] = alert['timestamp'].isoformat()
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error getting alerts: {e}")
+        return jsonify({'error': 'Failed to get alerts'}), 500
 
 @app.route('/api/stats')
 @token_required
@@ -795,29 +1603,87 @@ def threshold():
     
     return jsonify({'threshold': dashboard_api.threshold})
 
-@app.route('/api/alerts/<int:alert_id>/flag', methods=['POST'])
+@app.route('/api/alerts/<alert_id>/flag', methods=['POST'])
 @token_required
 @analyst_or_admin_required
 def flag_alert(alert_id):
-    """Flag an alert"""
-    for alert in dashboard_api.current_alerts:
-        if alert['id'] == alert_id:
-            alert['flagged'] = True
-            alert['status'] = 'flagged'
+    """Flag an alert in MongoDB"""
+    try:
+        username = request.current_user['username']
+        
+        # Convert alert_id to integer if it's a string
+        try:
+            alert_id_int = int(alert_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid alert ID format'}), 400
+        
+        success, message = dashboard_api.dal.update_alert(
+            alert_id=alert_id_int,
+            updates={
+                'flagged': True,
+                'status': 'flagged'
+            },
+            updated_by=username
+        )
+        
+        if success:
+            # Log the action
+            dashboard_api.dal.create_audit_log(
+                event_type='alert_updated',
+                username=username,
+                ip_address=get_client_info()[0],
+                action="flag_alert",
+                success=True,
+                details={'alert_id': alert_id_int, 'action': 'flagged'}
+            )
             return jsonify({'success': True})
-    return jsonify({'error': 'Alert not found'}), 404
+        else:
+            return jsonify({'error': message}), 404
+            
+    except Exception as e:
+        print(f"Error flagging alert {alert_id}: {e}")
+        return jsonify({'error': 'Failed to flag alert'}), 500
 
-@app.route('/api/alerts/<int:alert_id>/dismiss', methods=['POST'])
+@app.route('/api/alerts/<alert_id>/dismiss', methods=['POST'])
 @token_required
 @analyst_or_admin_required
 def dismiss_alert(alert_id):
-    """Dismiss an alert"""
-    for alert in dashboard_api.current_alerts:
-        if alert['id'] == alert_id:
-            alert['dismissed'] = True
-            alert['status'] = 'dismissed'
+    """Dismiss an alert in MongoDB"""
+    try:
+        username = request.current_user['username']
+        
+        # Convert alert_id to integer if it's a string
+        try:
+            alert_id_int = int(alert_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid alert ID format'}), 400
+        
+        success, message = dashboard_api.dal.update_alert(
+            alert_id=alert_id_int,
+            updates={
+                'dismissed': True,
+                'status': 'dismissed'
+            },
+            updated_by=username
+        )
+        
+        if success:
+            # Log the action
+            dashboard_api.dal.create_audit_log(
+                event_type='alert_updated',
+                username=username,
+                ip_address=get_client_info()[0],
+                action="dismiss_alert",
+                success=True,
+                details={'alert_id': alert_id_int, 'action': 'dismissed'}
+            )
             return jsonify({'success': True})
-    return jsonify({'error': 'Alert not found'}), 404
+        else:
+            return jsonify({'error': message}), 404
+            
+    except Exception as e:
+        print(f"Error dismissing alert {alert_id}: {e}")
+        return jsonify({'error': 'Failed to dismiss alert'}), 500
 
 @app.route('/api/monitoring/start', methods=['POST'])
 @token_required
@@ -839,21 +1705,30 @@ def stop_monitoring():
 @token_required
 @analyst_or_admin_required
 def get_score_distribution():
-    """Get anomaly score distribution for visualization"""
-    scores = [alert['anomaly_score'] for alert in dashboard_api.current_alerts]
-    
-    if not scores:
-        return jsonify({'bins': [], 'counts': []})
-    
-    # Create histogram data
-    hist, bin_edges = np.histogram(scores, bins=20, range=(0, 1))
-    bins = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(hist))]
-    
-    return jsonify({
-        'bins': bins,
-        'counts': hist.tolist(),
-        'total_samples': len(scores)
-    })
+    """Get anomaly score distribution for visualization from MongoDB"""
+    try:
+        # Get recent alerts from MongoDB
+        result = dashboard_api.dal.get_alerts(filters={}, page=1, per_page=1000)
+        alerts = result.get('alerts', [])
+        
+        scores = [alert['anomaly_score'] for alert in alerts if 'anomaly_score' in alert]
+        
+        if not scores:
+            return jsonify({'bins': [], 'counts': [], 'total_samples': 0})
+        
+        # Create histogram data
+        hist, bin_edges = np.histogram(scores, bins=20, range=(0, 1))
+        bins = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(hist))]
+        
+        return jsonify({
+            'bins': bins,
+            'counts': hist.tolist(),
+            'total_samples': len(scores)
+        })
+        
+    except Exception as e:
+        print(f"Error getting score distribution: {e}")
+        return jsonify({'error': 'Failed to get score distribution'}), 500
 
 @app.route('/api/attack-distribution')
 @token_required
@@ -861,9 +1736,17 @@ def get_score_distribution():
 def get_attack_distribution():
     """Get attack type distribution for threat analysis"""
     try:
-        # Get attack types from recent alerts (last 24 hours)
-        recent_alerts = [a for a in dashboard_api.alert_history if 
-                        datetime.fromisoformat(a['timestamp']) > datetime.now() - timedelta(hours=24)]
+        # Get recent alerts from MongoDB (last 24 hours)
+        from datetime import datetime, timedelta
+        cutoff_time = datetime.now() - timedelta(hours=24)
+        
+        # Get alerts from MongoDB
+        result = dashboard_api.dal.get_alerts(
+            filters={'timestamp': {'$gte': cutoff_time}}, 
+            page=1, 
+            per_page=1000
+        )
+        recent_alerts = result.get('alerts', [])
         
         if not recent_alerts:
             return jsonify({'distribution': {}, 'total_attacks': 0, 'time_range': '24h'})
@@ -930,10 +1813,16 @@ def get_attack_trends():
         hours = int(request.args.get('hours', 24))
         granularity = request.args.get('granularity', 'hour')  # hour, day
         
-        # Get alerts within time range
+        # Get alerts within time range from MongoDB
         cutoff_time = datetime.now() - timedelta(hours=hours)
-        recent_alerts = [a for a in dashboard_api.alert_history if 
-                        datetime.fromisoformat(a['timestamp']) > cutoff_time]
+        
+        # Get alerts from MongoDB
+        result = dashboard_api.dal.get_alerts(
+            filters={'timestamp': {'$gte': cutoff_time}}, 
+            page=1, 
+            per_page=1000
+        )
+        recent_alerts = result.get('alerts', [])
         
         if not recent_alerts:
             return jsonify({'trends': [], 'summary': {}, 'time_range': f'{hours}h'})
@@ -943,7 +1832,10 @@ def get_attack_trends():
         attack_type_trends = {}
         
         for alert in recent_alerts:
-            timestamp = datetime.fromisoformat(alert['timestamp'])
+            # Handle both string and datetime timestamp formats
+            timestamp = alert['timestamp']
+            if isinstance(timestamp, str):
+                timestamp = datetime.fromisoformat(timestamp)
             attack_type = alert['attack_type']
             
             # Create time bucket key
@@ -1028,8 +1920,14 @@ def get_attack_trends():
 def get_threat_triage():
     """Get prioritized threat analysis for efficient triage"""
     try:
-        # Get active alerts (not dismissed)
-        active_alerts = [a for a in dashboard_api.current_alerts if a['status'] != 'dismissed']
+        from datetime import datetime
+        # Get active alerts (not dismissed) from MongoDB
+        result = dashboard_api.dal.get_alerts(
+            filters={'status': {'$ne': 'dismissed'}}, 
+            page=1, 
+            per_page=500
+        )
+        active_alerts = result.get('alerts', [])
         
         if not active_alerts:
             return jsonify({'high_priority': [], 'medium_priority': [], 'low_priority': [], 'summary': {}})
@@ -1057,7 +1955,9 @@ def get_threat_triage():
                 score += 5
             
             # Recency factor (0-10 points) - more recent = higher priority
-            alert_time = datetime.fromisoformat(alert['timestamp'])
+            alert_time = alert['timestamp']
+            if isinstance(alert_time, str):
+                alert_time = datetime.fromisoformat(alert_time)
             hours_old = (datetime.now() - alert_time).total_seconds() / 3600
             if hours_old < 1:
                 score += 10
@@ -1068,8 +1968,17 @@ def get_threat_triage():
             
             return min(score, 100)  # Cap at 100
         
-        # Calculate priority scores
+        # Convert MongoDB objects to JSON-serializable format
         for alert in active_alerts:
+            # Convert ObjectId to string and set as id for frontend compatibility
+            if '_id' in alert:
+                alert['id'] = str(alert['_id'])
+                alert['_id'] = str(alert['_id'])
+            
+            # Convert datetime to ISO string
+            if 'timestamp' in alert and hasattr(alert['timestamp'], 'isoformat'):
+                alert['timestamp'] = alert['timestamp'].isoformat()
+            
             alert['priority_score'] = calculate_threat_priority(alert)
             
             # Determine priority level
@@ -1144,7 +2053,9 @@ def get_threat_triage():
         })
         
     except Exception as e:
-        pass  # Error handled
+        print(f"Error in threat triage endpoint: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to get threat triage data'}), 500
 
 # CSV Upload and Analysis Endpoints
@@ -1197,7 +2108,7 @@ def upload_csv():
         username = request.current_user['username']
         ip_address, user_agent = get_client_info()
         audit_logger.log_event(
-            event_type=AuditEventType.CSV_UPLOAD,
+            event_type='csv_upload',
             username=username,
             details={
                 'filename': filename,
@@ -1263,7 +2174,7 @@ def analyze_csv():
         username = request.current_user['username']
         ip_address, user_agent = get_client_info()
         audit_logger.log_event(
-            event_type=AuditEventType.CSV_ANALYSIS,
+            event_type='csv_analysis',
             username=username,
             details={
                 'filename': filename,
@@ -1425,7 +2336,7 @@ def download_csv_report(report_id):
         username = request.current_user['username']
         ip_address, user_agent = get_client_info()
         audit_logger.log_event(
-            event_type=AuditEventType.CSV_REPORT_GENERATED,
+            event_type='csv_report_generated',
             username=username,
             details={
                 'report_id': report_id,
@@ -1860,7 +2771,7 @@ def download_pdf_report(report_id):
         username = request.current_user['username']
         ip_address, user_agent = get_client_info()
         audit_logger.log_event(
-            event_type=AuditEventType.CSV_REPORT_GENERATED,
+            event_type='csv_report_generated',
             username=username,
             details={
                 'report_id': report_id,
@@ -1898,7 +2809,7 @@ def cleanup_csv_files():
         username = request.current_user['username']
         ip_address, user_agent = get_client_info()
         audit_logger.log_event(
-            event_type=AuditEventType.CSV_CLEANUP,
+            event_type='csv_cleanup',
             username=username,
             details={
                 'days_old': days_old,
@@ -1962,10 +2873,26 @@ def handle_request_alerts(data=None):
         emit('error', {'message': 'Authentication required'})
         return
     
-    emit('alerts_update', {
-        'alerts': dashboard_api.current_alerts[-20:],  # Last 20 alerts
-        'stats': dashboard_api.get_system_stats()
-    })
+    # Get recent alerts from MongoDB
+    try:
+        result = dashboard_api.dal.get_alerts(filters={}, page=1, per_page=20)
+        recent_alerts = result.get('alerts', [])
+        
+        # Convert ObjectId to string for JSON serialization
+        for alert in recent_alerts:
+            if '_id' in alert:
+                alert['_id'] = str(alert['_id'])
+            # Convert datetime to ISO string if needed
+            if 'timestamp' in alert and hasattr(alert['timestamp'], 'isoformat'):
+                alert['timestamp'] = alert['timestamp'].isoformat()
+        
+        emit('alerts_update', {
+            'alerts': recent_alerts,
+            'stats': dashboard_api.get_system_stats()
+        })
+    except Exception as e:
+        print(f"Error getting alerts for WebSocket: {e}")
+        emit('error', {'message': 'Failed to get alerts'})
 
 if __name__ == '__main__':
     print("🔐 Starting SOC Dashboard with Authentication...")

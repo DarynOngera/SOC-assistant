@@ -7,13 +7,14 @@ import ScoreDistribution from './components/ScoreDistribution';
 import AttackDistribution from './components/AttackDistribution';
 import AttackTrends from './components/AttackTrends';
 import ThreatTriage from './components/ThreatTriage';
-import Header from './components/Header';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import MFASetup from './components/MFASetup';
 import AuditLogs from './components/AuditLogs';
+import AuditExport from './components/AuditExport';
 import CSVAnalysis from './components/CSVAnalysis';
-import { Shield, Activity, AlertTriangle, CheckCircle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target } from 'lucide-react';
+import NetworkMap from './components/NetworkMap';
+import { Shield, Activity, AlertTriangle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target, Network, Menu, X, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -34,6 +35,8 @@ function App() {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     // Check for existing authentication
@@ -52,6 +55,7 @@ function App() {
     }
     
     setLoading(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const initializeSocket = (token) => {
@@ -189,7 +193,7 @@ function App() {
       if (response.ok) {
         setAlerts(prevAlerts =>
           prevAlerts.map(alert =>
-            alert.id === alertId
+            alert.alert_id === alertId
               ? { ...alert, status: action === 'flag' ? 'flagged' : 'dismissed' }
               : alert
           )
@@ -222,11 +226,12 @@ function App() {
     }
   };
 
-  const renderNavigation = () => {
+  const renderSidebar = () => {
     if (!user) return null;
 
     const navItems = [
       { id: 'dashboard', label: 'Dashboard', icon: Activity, roles: ['admin', 'analyst'] },
+      { id: 'network-map', label: 'Network Map', icon: Network, roles: ['admin', 'analyst'] },
       { id: 'threat-analysis', label: 'Threat Analysis', icon: TrendingUp, roles: ['admin', 'analyst'] },
       { id: 'threat-triage', label: 'Threat Triage', icon: Target, roles: ['admin', 'analyst'] },
       { id: 'csv-analysis', label: 'CSV Analysis', icon: Upload, roles: ['admin', 'analyst'] },
@@ -235,69 +240,162 @@ function App() {
       { id: 'settings', label: 'Settings', icon: Settings, roles: ['admin', 'analyst'] }
     ];
 
+    const filteredNavItems = navItems.filter(item => item.roles.includes(user.role));
+
     return (
-      <nav className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-8">
-              <div className="flex items-center">
-                <Shield className="h-8 w-8 text-indigo-600 mr-2" />
-                <span className="text-xl font-bold text-gray-900">SOC Dashboard</span>
-              </div>
-              <div className="flex space-x-4">
-                {navItems
-                  .filter(item => item.roles.includes(user.role))
-                  .map(item => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => setCurrentView(item.id)}
-                        className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                          currentView === item.id
-                            ? 'bg-indigo-100 text-indigo-700'
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Icon className="h-4 w-4 mr-2" />
-                        {item.label}
-                      </button>
-                    );
-                  })
-                }
-              </div>
+      <>
+        {/* Mobile Overlay */}
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-gray-600 bg-opacity-75 z-40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Sidebar */}
+        <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'}`}>
+          {/* Sidebar Header */}
+          <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
+            <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : ''}`}>
+              <Shield className="h-8 w-8 text-indigo-600" />
+              {!sidebarCollapsed && (
+                <span className="ml-2 text-xl font-bold text-gray-900 lg:block">
+                  SOC Dashboard
+                </span>
+              )}
             </div>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 rounded-full ${
-                  isConnected ? 'bg-green-500' : 'bg-red-500'
-                }`}></div>
-                <span className="text-sm text-gray-600">
+            
+            {/* Mobile close button */}
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200 active:scale-95"
+              aria-label="Close navigation menu"
+            >
+              <X className="h-6 w-6 transition-transform duration-200" />
+            </button>
+            
+            {/* Desktop collapse button */}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="hidden lg:block p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-5 w-5" />
+              ) : (
+                <ChevronLeft className="h-5 w-5" />
+              )}
+            </button>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 px-4 py-4 space-y-1">
+            {filteredNavItems.map(item => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setCurrentView(item.id);
+                    setSidebarOpen(false); // Close mobile sidebar on selection
+                  }}
+                  className={`w-full flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors group ${
+                    currentView === item.id
+                      ? 'bg-indigo-100 text-indigo-700'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  } ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
+                  title={sidebarCollapsed ? item.label : ''}
+                >
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  {!sidebarCollapsed && (
+                    <span className="ml-3 lg:block">{item.label}</span>
+                  )}
+                  {sidebarCollapsed && (
+                    <span className="absolute left-16 bg-gray-900 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap">
+                      {item.label}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* User Info and Status */}
+          <div className="border-t border-gray-200 p-4">
+            {/* Connection Status */}
+            <div className={`flex items-center mb-3 ${sidebarCollapsed ? 'lg:justify-center' : ''}`}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                isConnected ? 'bg-green-500' : 'bg-red-500'
+              }`}></div>
+              {!sidebarCollapsed && (
+                <span className="ml-2 text-sm text-gray-600 lg:block">
                   {isConnected ? 'Connected' : 'Disconnected'}
                 </span>
-              </div>
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">{user.username}</span>
-                <span className="ml-1 text-xs bg-gray-100 px-2 py-1 rounded capitalize">
-                  {user.role}
-                </span>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md"
-              >
-                <LogOut className="h-4 w-4 mr-1" />
-                Logout
-              </button>
+              )}
             </div>
+            
+            {/* User Info */}
+            {!sidebarCollapsed && (
+              <div className="text-sm text-gray-600 mb-3 lg:block">
+                <div className="font-medium">{user.username}</div>
+                <div className="text-xs bg-gray-100 px-2 py-1 rounded capitalize inline-block mt-1">
+                  {user.role}
+                </div>
+              </div>
+            )}
+            
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              className={`w-full flex items-center px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors ${
+                sidebarCollapsed ? 'lg:justify-center lg:px-2' : ''
+              }`}
+              title={sidebarCollapsed ? 'Logout' : ''}
+            >
+              <LogOut className="h-4 w-4 flex-shrink-0" />
+              {!sidebarCollapsed && (
+                <span className="ml-2 lg:block">Logout</span>
+              )}
+            </button>
           </div>
         </div>
-      </nav>
+      </>
+    );
+  };
+
+  const renderTopBar = () => {
+    if (!user) return null;
+    
+    return (
+      <div className="bg-white shadow-sm border-b lg:hidden sticky top-0 z-30">
+        <div className="flex items-center justify-between h-16 px-4">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 active:scale-95"
+            aria-label="Open navigation menu"
+          >
+            <div className="relative">
+              <Menu className="h-6 w-6 transition-transform duration-200" />
+            </div>
+          </button>
+          
+          <div className="flex items-center">
+            <Shield className="h-6 w-6 text-indigo-600 mr-2" />
+            <span className="text-lg font-bold text-gray-900">SOC</span>
+          </div>
+          
+          <div className="w-10"> {/* Spacer for balance */}</div>
+        </div>
+      </div>
     );
   };
 
   const renderContent = () => {
     switch (currentView) {
+      case 'network-map':
+        return <NetworkMap />;
       case 'threat-analysis':
         return (
           <div className="space-y-8">
@@ -352,7 +450,7 @@ function App() {
             </div>
 
             {/* Controls and Visualizations */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8">
               {/* Threshold Control */}
               <div className="card">
                 <ThresholdControl
@@ -368,19 +466,19 @@ function App() {
             </div>
 
             {/* Enhanced Dashboard with Quick Threat Overview */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mb-8">
-              <div className="xl:col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8">
+              <div className="lg:col-span-2 xl:col-span-2">
                 <AttackDistribution />
               </div>
-              <div>
-                <div className="bg-white rounded-lg shadow p-6">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Quick Triage</h4>
-                  <p className="text-sm text-gray-600 mb-4">
+              <div className="lg:col-span-1 xl:col-span-1">
+                <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+                  <h4 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Quick Triage</h4>
+                  <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4">
                     High-priority threats requiring immediate attention
                   </p>
                   <button
                     onClick={() => setCurrentView('threat-triage')}
-                    className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+                    className="w-full bg-indigo-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm sm:text-base"
                   >
                     View Threat Triage
                   </button>
@@ -417,32 +515,39 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {renderNavigation()}
+    <div className="min-h-screen bg-gray-50 lg:flex">
+      {renderSidebar()}
+      {renderTopBar()}
       
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {renderContent()}
-      </main>
+      <div className="flex-1 flex flex-col">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+          <div className="max-w-7xl mx-auto">
+            {renderContent()}
+          </div>
+        </main>
       
-      {/* Monitoring Controls for Dashboard View */}
-      {currentView === 'dashboard' && (
-        <div className="fixed bottom-6 right-6 flex space-x-2">
-          <button
-            onClick={startMonitoring}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-green-700 flex items-center"
-          >
-            <Activity className="h-4 w-4 mr-2" />
-            Start Monitoring
-          </button>
-          <button
-            onClick={stopMonitoring}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-red-700 flex items-center"
-          >
-            <AlertTriangle className="h-4 w-4 mr-2" />
-            Stop Monitoring
-          </button>
-        </div>
-      )}
+        {/* Monitoring Controls for Dashboard View */}
+        {currentView === 'dashboard' && (
+          <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+            <button
+              onClick={startMonitoring}
+              className="bg-green-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg shadow-lg hover:bg-green-700 flex items-center text-sm sm:text-base"
+            >
+              <Activity className="h-4 w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Start Monitoring</span>
+              <span className="sm:hidden">Start</span>
+            </button>
+            <button
+              onClick={stopMonitoring}
+              className="bg-red-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg shadow-lg hover:bg-red-700 flex items-center text-sm sm:text-base"
+            >
+              <AlertTriangle className="h-4 w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Stop Monitoring</span>
+              <span className="sm:hidden">Stop</span>
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ const Login = ({ onLogin, loading }) => {
   const [error, setError] = useState('');
   const [mfaRequired, setMfaRequired] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [checkingMfa, setCheckingMfa] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -54,11 +55,58 @@ const Login = ({ onLogin, loading }) => {
     }
   };
 
+  const checkMfaRequirement = async (username) => {
+    if (!username.trim()) {
+      setMfaRequired(false);
+      return;
+    }
+
+    setCheckingMfa(true);
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/check-mfa', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: username.trim() }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMfaRequired(data.mfa_required);
+        if (data.mfa_required) {
+          setError(''); // Clear any previous errors when MFA is required
+        }
+      }
+    } catch (err) {
+      // Silently fail - don't show error for MFA check
+      console.log('MFA check failed:', err);
+    } finally {
+      setCheckingMfa(false);
+    }
+  };
+
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+
+    // Check MFA requirement when username changes
+    if (name === 'username') {
+      // Debounce the MFA check
+      clearTimeout(window.mfaCheckTimeout);
+      window.mfaCheckTimeout = setTimeout(() => {
+        checkMfaRequirement(value);
+      }, 500);
+    }
+  };
+
+  const handleUsernameBlur = () => {
+    // Immediate check when user leaves username field
+    clearTimeout(window.mfaCheckTimeout);
+    checkMfaRequirement(formData.username);
   };
 
   return (
@@ -91,6 +139,7 @@ const Login = ({ onLogin, loading }) => {
                 placeholder="Username"
                 value={formData.username}
                 onChange={handleChange}
+                onBlur={handleUsernameBlur}
                 disabled={isLoading}
               />
             </div>
@@ -137,11 +186,13 @@ const Login = ({ onLogin, loading }) => {
                   name="mfaToken"
                   type="text"
                   maxLength="6"
+                  pattern="[0-9]{6}"
                   className="appearance-none rounded-none relative block w-full pl-10 px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                   placeholder="6-digit MFA code"
                   value={formData.mfaToken}
                   onChange={handleChange}
                   disabled={isLoading}
+                  autoFocus
                 />
               </div>
             )}
@@ -182,8 +233,18 @@ const Login = ({ onLogin, loading }) => {
           {mfaRequired && (
             <div className="text-center">
               <p className="text-xs text-gray-600">
+                <Smartphone className="inline h-3 w-3 mr-1" />
                 Enter the 6-digit code from your Google Authenticator app
               </p>
+            </div>
+          )}
+
+          {checkingMfa && (
+            <div className="text-center">
+              <div className="text-xs text-blue-600 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>
+                Checking MFA requirement...
+              </div>
             </div>
           )}
         </form>

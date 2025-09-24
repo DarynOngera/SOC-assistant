@@ -135,3 +135,5 @@ node_modules/
 /models/checkpoints/
 /data 
 src/dashboard/data
+reports/
+

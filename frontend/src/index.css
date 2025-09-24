@@ -10,7 +10,11 @@
 
 @layer components {
   .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6;
+  }
+  
+  .card-compact {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4;
   }
   
   .btn-primary {
@@ -51,5 +55,128 @@
   
   .status-offline {
     @apply bg-gray-400;
+  }
+  
+  /* Responsive utilities */
+  .responsive-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6;
+  }
+  
+  .responsive-flex {
+    @apply flex flex-col sm:flex-row gap-3 sm:gap-4;
+  }
+  
+  .responsive-text {
+    @apply text-sm sm:text-base;
+  }
+  
+  .responsive-heading {
+    @apply text-lg sm:text-xl lg:text-2xl;
+  }
+  
+  .responsive-button {
+    @apply px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base rounded-lg transition-colors;
+  }
+  
+  .mobile-hidden {
+    @apply hidden sm:block;
+  }
+  
+  .mobile-only {
+    @apply block sm:hidden;
+  }
+  
+  .tablet-hidden {
+    @apply hidden lg:block;
+  }
+  
+  .desktop-only {
+    @apply hidden lg:block;
+  }
+  
+  /* Touch-friendly interactive elements */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+  
+  /* Responsive spacing */
+  .responsive-padding {
+    @apply p-4 sm:p-6 lg:p-8;
+  }
+  
+  .responsive-margin {
+    @apply m-4 sm:m-6 lg:m-8;
+  }
+  
+  /* Responsive containers */
+  .container-responsive {
+    @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  /* Mobile-first navigation */
+  .nav-mobile {
+    @apply fixed inset-x-0 top-0 z-50 bg-white shadow-lg lg:relative lg:shadow-none;
+  }
+  
+  /* Responsive tables */
+  .table-responsive {
+    @apply overflow-x-auto;
+  }
+  
+  .table-responsive table {
+    @apply min-w-full;
+  }
+  
+  /* Mobile-friendly forms */
+  .form-responsive {
+    @apply space-y-4 sm:space-y-6;
+  }
+  
+  .input-responsive {
+    @apply w-full px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent;
+  }
+  
+  /* Responsive modals */
+  .modal-responsive {
+    @apply fixed inset-0 z-50 overflow-y-auto;
+  }
+  
+  .modal-content-responsive {
+    @apply relative w-full max-w-lg mx-auto my-8 sm:my-16 px-4;
+  }
+  
+  /* Responsive alerts */
+  .alert-responsive {
+    @apply p-3 sm:p-4 rounded-lg border-l-4;
+  }
+  
+  /* Responsive charts and visualizations */
+  .chart-responsive {
+    @apply w-full h-64 sm:h-80 lg:h-96;
+  }
+  
+  /* Breakpoint-specific utilities */
+  @screen sm {
+    .sm-only {
+      display: block;
+    }
+  }
+  
+  @screen md {
+    .md-only {
+      display: block;
+    }
+  }
+  
+  @screen lg {
+    .lg-only {
+      display: block;
+    }
+  }
+  
+  @screen xl {
+    .xl-only {
+      display: block;
+    }
   }
 }
