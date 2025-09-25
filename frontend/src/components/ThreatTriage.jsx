@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Shield, Clock, Target, TrendingUp, Eye, Flag, X, CheckCircle } from 'lucide-react';
+import { AlertTriangle, Shield, Clock, Target, TrendingUp, Eye, Flag, X, CheckCircle, 
+         ArrowUp, UserPlus, Search, FileText, Users, ChevronDown, ChevronUp } from 'lucide-react';
 
 const ThreatTriage = () => {
   const [triageData, setTriageData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedPriority, setSelectedPriority] = useState('high');
+  const [selectedAlerts, setSelectedAlerts] = useState([]);
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  const [analysts, setAnalysts] = useState([]);
+  const [showTriageModal, setShowTriageModal] = useState(false);
+  const [currentAlert, setCurrentAlert] = useState(null);
+  const [triageAction, setTriageAction] = useState(null);
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('access_token');
@@ -37,24 +44,103 @@ const ThreatTriage = () => {
     }
   };
 
-  const handleAlertAction = async (alertId, action) => {
+  const fetchAnalysts = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/analysts', {
+        headers: getAuthHeaders()
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAnalysts(data.analysts || []);
+      }
+    } catch (err) {
+      console.error('Error fetching analysts:', err);
+    }
+  };
+
+  const handleAlertAction = async (alertId, action, actionData = {}) => {
     try {
       const response = await fetch(`http://localhost:5000/api/alerts/${alertId}/${action}`, {
         method: 'POST',
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        body: JSON.stringify(actionData)
       });
 
       if (response.ok) {
         // Refresh triage data after action
         fetchTriageData();
+        setShowTriageModal(false);
+        setCurrentAlert(null);
+        setTriageAction(null);
+      } else {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.error || 'Action failed'}`);
       }
     } catch (err) {
       console.error(`Error ${action}ing alert:`, err);
+      alert(`Error: Failed to ${action} alert`);
     }
+  };
+
+  const handleBulkAction = async (action, actionData = {}) => {
+    if (selectedAlerts.length === 0) {
+      alert('Please select alerts first');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:5000/api/alerts/bulk-triage', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          alert_ids: selectedAlerts,
+          action: action,
+          action_data: actionData
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`Bulk action completed: ${result.successful} successful, ${result.failed} failed`);
+        fetchTriageData();
+        setSelectedAlerts([]);
+        setShowBulkActions(false);
+      } else {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.error || 'Bulk action failed'}`);
+      }
+    } catch (err) {
+      console.error(`Error in bulk ${action}:`, err);
+      alert(`Error: Failed to perform bulk ${action}`);
+    }
+  };
+
+  const openTriageModal = (alert, action) => {
+    setCurrentAlert(alert);
+    setTriageAction(action);
+    setShowTriageModal(true);
+  };
+
+  const handleAlertSelection = (alertId) => {
+    setSelectedAlerts(prev => 
+      prev.includes(alertId) 
+        ? prev.filter(id => id !== alertId)
+        : [...prev, alertId]
+    );
+  };
+
+  const selectAllAlerts = () => {
+    const currentAlerts = triageData[`${selectedPriority}_priority`] || [];
+    const allIds = currentAlerts.map(alert => alert.id);
+    setSelectedAlerts(prev => 
+      prev.length === allIds.length ? [] : allIds
+    );
   };
 
   useEffect(() => {
     fetchTriageData();
+    fetchAnalysts();
     const interval = setInterval(fetchTriageData, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
   }, []);
@@ -158,6 +244,229 @@ const ThreatTriage = () => {
 
   const currentAlerts = triageData[`${selectedPriority}_priority`] || [];
 
+  // Triage Modal Component
+  const TriageModal = () => {
+    const [formData, setFormData] = useState({});
+
+    if (!showTriageModal || !currentAlert || !triageAction) return null;
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      handleAlertAction(currentAlert.id, triageAction, formData);
+    };
+
+    const renderModalContent = () => {
+      switch (triageAction) {
+        case 'escalate':
+          return (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Escalate To
+                </label>
+                <select
+                  value={formData.escalated_to || 'Senior Analyst'}
+                  onChange={(e) => setFormData({...formData, escalated_to: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                >
+                  <option value="Senior Analyst">Senior Analyst</option>
+                  <option value="SOC Manager">SOC Manager</option>
+                  <option value="Security Team Lead">Security Team Lead</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Escalation Reason
+                </label>
+                <textarea
+                  value={formData.reason || ''}
+                  onChange={(e) => setFormData({...formData, reason: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  rows={3}
+                  placeholder="Explain why this alert needs escalation..."
+                />
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.priority_increase !== false}
+                  onChange={(e) => setFormData({...formData, priority_increase: e.target.checked})}
+                  className="mr-2"
+                />
+                <label className="text-sm text-gray-700">Increase priority level</label>
+              </div>
+            </div>
+          );
+
+        case 'assign':
+          return (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Assign To
+                </label>
+                <select
+                  value={formData.assigned_to || ''}
+                  onChange={(e) => setFormData({...formData, assigned_to: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  required
+                >
+                  <option value="">Select an analyst...</option>
+                  {analysts.map(analyst => (
+                    <option key={analyst.username} value={analyst.username}>
+                      {analyst.full_name} ({analyst.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Assignment Notes
+                </label>
+                <textarea
+                  value={formData.notes || ''}
+                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  rows={3}
+                  placeholder="Add any specific instructions or context..."
+                />
+              </div>
+            </div>
+          );
+
+        case 'investigate':
+          return (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Investigation Priority
+                </label>
+                <select
+                  value={formData.priority || 'medium'}
+                  onChange={(e) => setFormData({...formData, priority: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Initial Investigation Notes
+                </label>
+                <textarea
+                  value={formData.notes || ''}
+                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  rows={4}
+                  placeholder="Document initial findings, investigation plan, or relevant context..."
+                />
+              </div>
+            </div>
+          );
+
+        case 'resolve':
+          return (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Resolution Type
+                </label>
+                <select
+                  value={formData.resolution_type || 'resolved'}
+                  onChange={(e) => setFormData({...formData, resolution_type: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                >
+                  <option value="resolved">Resolved</option>
+                  <option value="false_positive">False Positive</option>
+                  <option value="duplicate">Duplicate</option>
+                  <option value="no_action_required">No Action Required</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Resolution Notes *
+                </label>
+                <textarea
+                  value={formData.notes || ''}
+                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  rows={3}
+                  placeholder="Explain how the alert was resolved..."
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Action Taken
+                </label>
+                <textarea
+                  value={formData.action_taken || ''}
+                  onChange={(e) => setFormData({...formData, action_taken: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  rows={2}
+                  placeholder="Describe any remediation actions taken..."
+                />
+              </div>
+            </div>
+          );
+
+        default:
+          return <div>Unknown action</div>;
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 capitalize">
+              {triageAction} Alert #{currentAlert.id}
+            </h3>
+            <button
+              onClick={() => setShowTriageModal(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+            <div className="text-sm text-gray-600">
+              <div><strong>Attack Type:</strong> {currentAlert.attack_type}</div>
+              <div><strong>Source:</strong> {currentAlert.source_ip}</div>
+              <div><strong>Severity:</strong> {currentAlert.severity}</div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            {renderModalContent()}
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowTriageModal(false)}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+              >
+                {triageAction === 'resolve' ? 'Resolve' : 
+                 triageAction === 'escalate' ? 'Escalate' :
+                 triageAction === 'assign' ? 'Assign' : 'Start Investigation'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
       {/* Header */}
@@ -168,13 +477,61 @@ const ThreatTriage = () => {
             {triageData.summary.total_active_alerts} active alerts requiring attention
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-600">Avg Priority Score:</span>
-          <span className="font-semibold text-indigo-600">
-            {triageData.summary.average_priority_score}/100
-          </span>
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-600">Avg Priority Score:</span>
+            <span className="font-semibold text-indigo-600">
+              {triageData.summary.average_priority_score}/100
+            </span>
+          </div>
+          {selectedAlerts.length > 0 && (
+            <button
+              onClick={() => setShowBulkActions(!showBulkActions)}
+              className="flex items-center space-x-2 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200"
+            >
+              <Users className="h-4 w-4" />
+              <span>Bulk Actions ({selectedAlerts.length})</span>
+              {showBulkActions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Bulk Actions Panel */}
+      {showBulkActions && selectedAlerts.length > 0 && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-medium text-gray-900">Bulk Actions</h4>
+            <span className="text-sm text-gray-600">{selectedAlerts.length} alerts selected</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => handleBulkAction('flag')}
+              className="flex items-center space-x-1 px-3 py-1 bg-orange-100 text-orange-700 rounded-md hover:bg-orange-200"
+            >
+              <Flag className="h-4 w-4" />
+              <span>Flag All</span>
+            </button>
+            <button
+              onClick={() => handleBulkAction('dismiss')}
+              className="flex items-center space-x-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+            >
+              <X className="h-4 w-4" />
+              <span>Dismiss All</span>
+            </button>
+            <button
+              onClick={() => {
+                const assignedTo = prompt('Assign to (username):');
+                if (assignedTo) handleBulkAction('assign', { assigned_to: assignedTo });
+              }}
+              className="flex items-center space-x-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+            >
+              <UserPlus className="h-4 w-4" />
+              <span>Assign All</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Priority Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -271,50 +628,129 @@ const ThreatTriage = () => {
           </div>
         ) : (
           <div className="space-y-3">
+            {/* Select All Checkbox */}
+            <div className="flex items-center space-x-3 pb-2 border-b border-gray-200">
+              <input
+                type="checkbox"
+                checked={selectedAlerts.length === currentAlerts.length && currentAlerts.length > 0}
+                onChange={selectAllAlerts}
+                className="rounded"
+              />
+              <span className="text-sm text-gray-600">
+                Select All ({currentAlerts.length} alerts)
+              </span>
+            </div>
+
             {currentAlerts.map((alert) => (
               <div 
                 key={alert.id} 
-                className={`border-2 rounded-lg p-4 ${getPriorityColor(alert.priority_level)}`}
+                className={`border-2 rounded-lg p-4 ${getPriorityColor(alert.priority_level)} ${
+                  selectedAlerts.includes(alert.id) ? 'ring-2 ring-indigo-300' : ''
+                }`}
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getSeverityColor(alert.severity)}`}>
-                        {alert.severity.toUpperCase()}
-                      </span>
-                      <span className="font-medium text-gray-900">{alert.attack_type}</span>
-                      <span className="text-sm text-gray-500">
-                        Score: {alert.priority_score}/100
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-600">Source:</span>
-                        <div className="font-mono">{alert.source_ip}</div>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Destination:</span>
-                        <div className="font-mono">{alert.destination_ip}</div>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Anomaly Score:</span>
-                        <div className="font-semibold">{alert.anomaly_score}</div>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Time:</span>
-                        <div>{formatTimestamp(alert.timestamp)}</div>
-                      </div>
-                    </div>
+                  <div className="flex items-start space-x-3 flex-1">
+                    {/* Selection Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={selectedAlerts.includes(alert.id)}
+                      onChange={() => handleAlertSelection(alert.id)}
+                      className="mt-1 rounded"
+                    />
 
-                    <div className="mt-2 flex items-center space-x-4 text-sm text-gray-600">
-                      <span>Protocol: {alert.protocol}</span>
-                      <span>Port: {alert.dst_port}</span>
-                      <span>Confidence: {alert.confidence}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${getSeverityColor(alert.severity)}`}>
+                          {alert.severity.toUpperCase()}
+                        </span>
+                        <span className="font-medium text-gray-900">{alert.attack_type}</span>
+                        <span className="text-sm text-gray-500">
+                          Score: {alert.priority_score}/100
+                        </span>
+                        {alert.status && alert.status !== 'new' && (
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                            {alert.status.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">Source:</span>
+                          <div className="font-mono">{alert.source_ip}</div>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Destination:</span>
+                          <div className="font-mono">{alert.destination_ip}</div>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Anomaly Score:</span>
+                          <div className="font-semibold">{alert.anomaly_score}</div>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Time:</span>
+                          <div>{formatTimestamp(alert.timestamp)}</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 flex items-center space-x-4 text-sm text-gray-600">
+                        <span>Protocol: {alert.protocol}</span>
+                        <span>Port: {alert.dst_port}</span>
+                        <span>Confidence: {alert.confidence}</span>
+                        {alert.assigned_to && (
+                          <span className="text-blue-600">Assigned to: {alert.assigned_to}</span>
+                        )}
+                      </div>
+
+                      {/* Investigation Status */}
+                      {alert.investigation_started && (
+                        <div className="mt-2 p-2 bg-blue-50 rounded text-sm">
+                          <div className="flex items-center space-x-2">
+                            <Search className="h-4 w-4 text-blue-600" />
+                            <span className="text-blue-800 font-medium">
+                              Investigation in progress by {alert.investigator}
+                            </span>
+                          </div>
+                          {alert.investigation_notes && (
+                            <div className="mt-1 text-blue-700 text-xs">
+                              Latest: {alert.investigation_notes.split('\n').pop()}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-2 ml-4">
+                  {/* Enhanced Action Buttons */}
+                  <div className="flex items-center space-x-1 ml-4">
+                    <button
+                      onClick={() => openTriageModal(alert, 'escalate')}
+                      className="p-2 text-red-600 hover:bg-red-100 rounded"
+                      title="Escalate alert"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => openTriageModal(alert, 'assign')}
+                      className="p-2 text-blue-600 hover:bg-blue-100 rounded"
+                      title="Assign alert"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => openTriageModal(alert, 'investigate')}
+                      className="p-2 text-purple-600 hover:bg-purple-100 rounded"
+                      title="Start investigation"
+                    >
+                      <Search className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => openTriageModal(alert, 'resolve')}
+                      className="p-2 text-green-600 hover:bg-green-100 rounded"
+                      title="Resolve alert"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                    </button>
                     <button
                       onClick={() => handleAlertAction(alert.id, 'flag')}
                       className="p-2 text-orange-600 hover:bg-orange-100 rounded"
@@ -353,6 +789,9 @@ const ThreatTriage = () => {
           </div>
         )}
       </div>
+
+      {/* Triage Modal */}
+      <TriageModal />
     </div>
   );
 };
