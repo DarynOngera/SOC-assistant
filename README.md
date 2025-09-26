@@ -1,4 +1,4 @@
-# SOC Assistant - Intelligent Security Operations Center
+# SOC Assistant - Intelligent Security Operations Center (AEGIS PRIME)
 
 A comprehensive machine learning-powered Security Operations Center (SOC) assistant for real-time network anomaly detection and threat analysis.
 
