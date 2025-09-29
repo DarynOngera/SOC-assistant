@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///usr/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.94SVN scan initiated Wed Sep 24 14:48:56 2025 as: nmap -sS -sV -p 80,443,8080 -&#45;script http-enum -oA simple_recon www.habibonifade.com -->
+<nmaprun scanner="nmap" args="nmap -sS -sV -p 80,443,8080 -&#45;script http-enum -oA simple_recon www.habibonifade.com" start="1758714536" startstr="Wed Sep 24 14:48:56 2025" version="7.94SVN" xmloutputversion="1.05">
+<scaninfo type="syn" protocol="tcp" numservices="3" services="80,443,8080"/>
+<verbose level="0"/>
+<debugging level="0"/>
+<hosthint><status state="up" reason="unknown-response" reason_ttl="0"/>
+<address addr="151.101.67.7" addrtype="ipv4"/>
+<hostnames>
+<hostname name="www.habibonifade.com" type="user"/>
+</hostnames>
+</hosthint>

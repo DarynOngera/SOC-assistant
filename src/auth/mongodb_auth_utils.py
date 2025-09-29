@@ -385,31 +385,44 @@ def token_required(f):
     """Decorator to require valid JWT token"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        print(f"DEBUG: token_required decorator called for {f.__name__}")
         token = None
         auth_header = request.headers.get('Authorization')
+        print(f"DEBUG: Authorization header: {auth_header}")
         
         if auth_header:
             try:
                 token = auth_header.split(" ")[1]  # Bearer <token>
+                print(f"DEBUG: Extracted token: {token[:20]}...")
             except IndexError:
+                print("DEBUG: Invalid token format")
                 return jsonify({'error': 'Invalid token format'}), 401
         
         if not token:
+            print("DEBUG: Token is missing")
             return jsonify({'error': 'Token is missing'}), 401
         
-        auth_manager = current_app.auth_manager
-        valid, payload = auth_manager.verify_token(token)
-        
-        if not valid:
-            return jsonify({'error': payload.get('error', 'Invalid token')}), 401
-        
-        # Add user info to request context
-        request.current_user = {
-            'username': payload.get('username'),
-            'role': payload.get('role')
-        }
-        
-        return f(*args, **kwargs)
+        try:
+            auth_manager = current_app.auth_manager
+            print(f"DEBUG: Got auth_manager: {auth_manager}")
+            valid, payload = auth_manager.verify_token(token)
+            print(f"DEBUG: Token validation result: valid={valid}, payload={payload}")
+            
+            if not valid:
+                print(f"DEBUG: Token validation failed: {payload}")
+                return jsonify({'error': payload.get('error', 'Invalid token')}), 401
+            
+            # Add user info to request context
+            request.current_user = {
+                'username': payload.get('username'),
+                'role': payload.get('role')
+            }
+            print(f"DEBUG: Set current_user: {request.current_user}")
+            
+            return f(*args, **kwargs)
+        except Exception as e:
+            print(f"DEBUG: Exception in token_required: {e}")
+            return jsonify({'error': 'Authentication failed'}), 401
     
     return decorated
 

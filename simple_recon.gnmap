@@ -1,0 +1,1 @@
+# Nmap 7.94SVN scan initiated Wed Sep 24 14:48:56 2025 as: nmap -sS -sV -p 80,443,8080 --script http-enum -oA simple_recon www.habibonifade.com
