@@ -957,6 +957,357 @@ def disable_mfa():
         print(f"Error disabling MFA: {e}")
         return jsonify({'error': 'MFA disable failed'}), 500
 
+# Email OTP / Passwordless Login endpoints
+@app.route('/api/auth/passwordless/request', methods=['POST'])
+@limiter.limit("3 per minute")
+def request_passwordless_login():
+    """Request passwordless login via email OTP"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({'error': 'Email required'}), 400
+        
+        success, message = auth_manager.request_passwordless_login(email)
+        
+        # Always return success to prevent email enumeration
+        return jsonify({'message': 'If this email is registered, you will receive a login code'})
+        
+    except Exception as e:
+        logger.error(f"Passwordless login request error: {e}")
+        return jsonify({'error': 'Failed to process request'}), 500
+
+@app.route('/api/auth/passwordless/verify', methods=['POST'])
+@limiter.limit("5 per minute")
+def verify_passwordless_login():
+    """Verify email OTP and authenticate"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        otp = data.get('otp')
+        
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP required'}), 400
+        
+        ip_address, user_agent = get_client_info()
+        
+        success, message, user_info = auth_manager.authenticate_with_email_otp(email, otp)
+        
+        if not success:
+            log_login_failed(email, ip_address, user_agent, message)
+            return jsonify({'error': message}), 401
+        
+        # Generate tokens
+        access_token, refresh_token = auth_manager.generate_tokens(
+            user_info['username'], 
+            user_info['role']
+        )
+        
+        log_login_success(user_info['username'], ip_address, user_agent)
+        
+        return jsonify({
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': user_info,
+            'expires_in': 28800
+        })
+        
+    except Exception as e:
+        logger.error(f"Passwordless verification error: {e}")
+        return jsonify({'error': 'Verification failed'}), 500
+
+# Email Verification endpoints
+@app.route('/api/auth/email/verify', methods=['POST'])
+@limiter.limit("5 per minute")
+def verify_email():
+    """Verify email address with OTP"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        otp = data.get('otp')
+        
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP required'}), 400
+        
+        success, message = auth_manager.verify_email_with_otp(email, otp)
+        
+        if not success:
+            return jsonify({'error': message}), 400
+        
+        return jsonify({'message': message})
+        
+    except Exception as e:
+        logger.error(f"Email verification error: {e}")
+        return jsonify({'error': 'Verification failed'}), 500
+
+@app.route('/api/auth/email/resend', methods=['POST'])
+@limiter.limit("3 per minute")
+def resend_verification():
+    """Resend email verification OTP"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({'error': 'Email required'}), 400
+        
+        success, message = auth_manager.resend_verification_otp(email)
+        
+        # Always return success to prevent email enumeration
+        return jsonify({'message': 'If this email is registered and unverified, you will receive a verification code'})
+        
+    except Exception as e:
+        logger.error(f"Resend verification error: {e}")
+        return jsonify({'error': 'Failed to resend verification'}), 500
+
+@app.route('/api/auth/email/status/<email>', methods=['GET'])
+@limiter.limit("10 per minute")
+def check_email_verification_status(email):
+    """Check if email is verified (public endpoint for user convenience)"""
+    try:
+        user = auth_manager.dal.get_user_by_email(email)
+        
+        if not user:
+            # Don't reveal if email exists
+            return jsonify({'verified': False, 'exists': False})
+        
+        return jsonify({
+            'verified': user.get('email_verified', False),
+            'exists': True
+        })
+        
+    except Exception as e:
+        logger.error(f"Email status check error: {e}")
+        return jsonify({'error': 'Failed to check status'}), 500
+
+# Passkey / WebAuthn endpoints
+@app.route('/api/auth/passkey/register/begin', methods=['POST'])
+@token_required
+def begin_passkey_registration():
+    """Begin passkey registration"""
+    try:
+        username = request.current_user['username']
+        success, options, state_id = auth_manager.begin_passkey_registration(username)
+        
+        if not success:
+            return jsonify({'error': options}), 400
+        
+        return jsonify({
+            'options': options,
+            'state_id': state_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Passkey registration begin error: {e}")
+        return jsonify({'error': 'Failed to begin passkey registration'}), 500
+
+@app.route('/api/auth/passkey/register/complete', methods=['POST'])
+@token_required
+def complete_passkey_registration():
+    """Complete passkey registration"""
+    try:
+        data = request.get_json()
+        state_id = data.get('state_id')
+        credential = data.get('credential')
+        
+        if not state_id or not credential:
+            return jsonify({'error': 'State ID and credential required'}), 400
+        
+        success, message = auth_manager.complete_passkey_registration(state_id, credential)
+        
+        if not success:
+            return jsonify({'error': message}), 400
+        
+        username = request.current_user['username']
+        ip_address, user_agent = get_client_info()
+        logger.info(f"Passkey registered for user {username} from {ip_address}")
+        
+        return jsonify({'message': message})
+        
+    except Exception as e:
+        logger.error(f"Passkey registration complete error: {e}")
+        return jsonify({'error': 'Failed to complete passkey registration'}), 500
+
+@app.route('/api/auth/passkey/authenticate/begin', methods=['POST'])
+@limiter.limit("10 per minute")
+def begin_passkey_authentication():
+    """Begin passkey authentication"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        
+        if not username:
+            return jsonify({'error': 'Username required'}), 400
+        
+        success, result, state_id = auth_manager.begin_passkey_authentication(username)
+        
+        if not success:
+            # result contains error message when success is False
+            logger.warning(f"Passkey auth begin failed for {username}: {result}")
+            return jsonify({'error': result}), 400
+        
+        # result contains options when success is True
+        return jsonify({
+            'options': result,
+            'state_id': state_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Passkey authentication begin error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to begin passkey authentication'}), 500
+
+@app.route('/api/auth/passkey/authenticate/complete', methods=['POST'])
+@limiter.limit("10 per minute")
+def complete_passkey_authentication():
+    """Complete passkey authentication"""
+    try:
+        data = request.get_json()
+        state_id = data.get('state_id')
+        credential = data.get('credential')
+        
+        if not state_id or not credential:
+            return jsonify({'error': 'State ID and credential required'}), 400
+        
+        ip_address, user_agent = get_client_info()
+        
+        success, message, user_info = auth_manager.complete_passkey_authentication(state_id, credential)
+        
+        if not success:
+            log_login_failed('passkey_auth', ip_address, user_agent, message)
+            return jsonify({'error': message}), 401
+        
+        # Generate tokens
+        access_token, refresh_token = auth_manager.generate_tokens(
+            user_info['username'],
+            user_info['role']
+        )
+        
+        log_login_success(user_info['username'], ip_address, user_agent)
+        
+        return jsonify({
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': user_info,
+            'expires_in': 28800
+        })
+        
+    except Exception as e:
+        logger.error(f"Passkey authentication complete error: {e}")
+        return jsonify({'error': 'Authentication failed'}), 500
+
+@app.route('/api/auth/passkey/list', methods=['GET'])
+@token_required
+def list_passkeys():
+    """List user's registered passkeys"""
+    try:
+        username = request.current_user['username']
+        passkeys = auth_manager.list_passkeys(username)
+        
+        return jsonify({'passkeys': passkeys})
+        
+    except Exception as e:
+        logger.error(f"List passkeys error: {e}")
+        return jsonify({'error': 'Failed to list passkeys'}), 500
+
+@app.route('/api/auth/passkey/<credential_id>', methods=['DELETE'])
+@token_required
+def delete_passkey(credential_id):
+    """Delete a passkey"""
+    try:
+        username = request.current_user['username']
+        success, message = auth_manager.delete_passkey(username, credential_id)
+        
+        if not success:
+            return jsonify({'error': message}), 400
+        
+        ip_address, user_agent = get_client_info()
+        logger.info(f"Passkey deleted for user {username} from {ip_address}")
+        
+        return jsonify({'message': message})
+        
+    except Exception as e:
+        logger.error(f"Delete passkey error: {e}")
+        return jsonify({'error': 'Failed to delete passkey'}), 500
+
+# Authentication preferences endpoints
+@app.route('/api/auth/preferences', methods=['GET'])
+@token_required
+def get_auth_preferences():
+    """Get user's authentication preferences"""
+    try:
+        username = request.current_user['username']
+        user = auth_manager.dal.get_user_by_username(username)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Check if user has passkeys
+        passkeys = auth_manager.list_passkeys(username)
+        has_passkeys = len(passkeys) > 0
+        
+        preferences = {
+            'default_method': user.get('default_auth_method', 'password'),
+            'email_otp_enabled': user.get('email_otp_enabled', False),
+            'passkey_enabled': user.get('passkey_enabled', has_passkeys),
+            'mfa_enabled': user.get('mfa_enabled', False),
+            'email_verified': user.get('email_verified', False)
+        }
+        
+        return jsonify(preferences)
+        
+    except Exception as e:
+        logger.error(f"Get auth preferences error: {e}")
+        return jsonify({'error': 'Failed to get preferences'}), 500
+
+@app.route('/api/auth/preferences', methods=['PUT'])
+@token_required
+def update_auth_preferences():
+    """Update user's authentication preferences"""
+    try:
+        username = request.current_user['username']
+        data = request.get_json()
+        
+        # Allowed preference keys
+        allowed_keys = ['default_method', 'email_otp_enabled', 'passkey_enabled']
+        
+        # Filter and validate updates
+        updates = {}
+        for key in allowed_keys:
+            if key in data:
+                value = data[key]
+                
+                # Validate default_method
+                if key == 'default_method':
+                    if value not in ['password', 'email_otp', 'passkey']:
+                        return jsonify({'error': 'Invalid authentication method'}), 400
+                
+                updates[key] = value
+        
+        if not updates:
+            return jsonify({'error': 'No valid preferences to update'}), 400
+        
+        # Update user preferences
+        success = auth_manager.dal.update_user(username, updates)
+        
+        if not success:
+            return jsonify({'error': 'Failed to update preferences'}), 500
+        
+        # Log the change
+        ip_address, user_agent = get_client_info()
+        logger.info(f"User {username} updated auth preferences from {ip_address}")
+        
+        return jsonify({
+            'message': 'Preferences updated successfully',
+            'preferences': updates
+        })
+        
+    except Exception as e:
+        logger.error(f"Update auth preferences error: {e}")
+        return jsonify({'error': 'Failed to update preferences'}), 500
+
 # Admin user management endpoints
 @app.route('/api/admin/users', methods=['GET'])
 @token_required
@@ -990,12 +1341,19 @@ def create_user():
         if not success:
             return jsonify({'error': message}), 400
         
+        # Send email verification OTP
+        otp_success, otp_message = auth_manager.send_verification_otp(email, username)
+        
         # Log user creation
         admin_username = request.current_user['username']
         ip_address, user_agent = get_client_info()
         log_user_created(admin_username, username, ip_address, user_agent)
         
-        return jsonify({'message': message}), 201
+        return jsonify({
+            'message': message,
+            'verification_sent': otp_success,
+            'verification_message': otp_message
+        }), 201
         
     except Exception as e:
         return jsonify({'error': 'User creation failed'}), 500

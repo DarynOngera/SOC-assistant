@@ -68,6 +68,10 @@ class MongoSchemas:
             "last_login": Optional[datetime],
             "failed_attempts": int,
             "locked_until": Optional[datetime],
+            "email_verified": bool,
+            "default_auth_method": str,  # "password", "email_otp", or "passkey"
+            "email_otp_enabled": bool,
+            "passkey_enabled": bool,
             "profile": {
                 "first_name": Optional[str],
                 "last_name": Optional[str],

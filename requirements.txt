@@ -23,3 +23,6 @@ pymongo>=4.3.0
 motor>=3.1.0
 openpyxl>=3.0.0
 xlsxwriter>=3.0.0
+webauthn>=2.0.0
+cryptography>=41.0.0
+fido2>=1.1.2
