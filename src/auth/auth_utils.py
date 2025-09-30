@@ -37,10 +37,19 @@ import pyotp
 import qrcode
 import io
 import base64
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify, current_app
 from typing import Dict, List, Optional, Tuple
+from fido2.server import Fido2Server
+from fido2.webauthn import PublicKeyCredentialRpEntity, UserVerificationRequirement
+from fido2 import cbor
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
 
 class AuthManager:
     def __init__(self, users_file: str = "data/users.json", secret_key: str = None):
@@ -48,6 +57,24 @@ class AuthManager:
         self.secret_key = secret_key or os.getenv('JWT_SECRET_KEY', 'soc-dashboard-secret-key-change-in-production')
         self.token_expiry = timedelta(hours=8)  # 8 hour sessions
         self.refresh_expiry = timedelta(days=7)  # 7 day refresh tokens
+        self.otp_expiry = timedelta(minutes=10)  # 10 minute OTP validity
+        
+        # Email OTP storage (in-memory, use Redis in production)
+        self.email_otps = {}  # {email: {'otp': code, 'expires': datetime, 'attempts': int}}
+        
+        # Email configuration
+        self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        self.smtp_username = os.getenv('SMTP_USERNAME', '')
+        self.smtp_password = os.getenv('SMTP_PASSWORD', '')
+        self.smtp_from = os.getenv('SMTP_FROM', 'noreply@soc.local')
+        
+        # WebAuthn/Passkey configuration
+        self.rp_entity = PublicKeyCredentialRpEntity(
+            id=os.getenv('RP_ID', 'localhost'),
+            name="SOC Dashboard"
+        )
+        self.fido2_server = Fido2Server(self.rp_entity)
         
         # Ensure data directory exists
         os.makedirs(os.path.dirname(self.users_file), exist_ok=True)
@@ -65,6 +92,8 @@ class AuthManager:
                     'email': 'admin@soc.local',
                     'mfa_enabled': False,
                     'mfa_secret': None,
+                    'passkeys': [],  # List of registered passkeys
+                    'email_verified': False,
                     'created_at': datetime.now().isoformat(),
                     'last_login': None,
                     'active': True,
@@ -142,6 +171,8 @@ class AuthManager:
             'email': email,
             'mfa_enabled': False,
             'mfa_secret': None,
+            'passkeys': [],
+            'email_verified': False,
             'created_at': datetime.now().isoformat(),
             'last_login': None,
             'active': True,
@@ -407,6 +438,530 @@ class AuthManager:
         self._save_users(users)
         
         return True, "Password changed successfully"
+    
+    # ============ Email OTP Methods ============
+    
+    def generate_email_otp(self, email: str) -> str:
+        """Generate 6-digit OTP for email"""
+        otp = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
+        
+        # Store OTP with expiry
+        self.email_otps[email] = {
+            'otp': otp,
+            'expires': datetime.now() + self.otp_expiry,
+            'attempts': 0
+        }
+        
+        return otp
+    
+    def send_email_otp(self, email: str, otp: str) -> Tuple[bool, str]:
+        """Send OTP via email"""
+        if not self.smtp_username or not self.smtp_password:
+            # Development mode - just log the OTP
+            print(f"[DEV MODE] Email OTP for {email}: {otp}")
+            return True, f"OTP generated (dev mode): {otp}"
+        
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = 'SOC Dashboard - Login Code'
+            msg['From'] = self.smtp_from
+            msg['To'] = email
+            
+            html = f"""
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              </head>
+              <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a;">
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 20px;">
+                  <tr>
+                    <td align="center">
+                      <table width="600" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);">
+                        
+                        <!-- Header with Shield Icon -->
+                        <tr>
+                          <td style="background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%); padding: 30px; text-align: center;">
+                            <div style="width: 60px; height: 60px; background: rgba(255, 255, 255, 0.2); border-radius: 50%; margin: 0 auto 15px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+                              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                              </svg>
+                            </div>
+                            <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                              SOC Dashboard
+                            </h1>
+                            <p style="color: rgba(255, 255, 255, 0.9); margin: 8px 0 0; font-size: 14px; letter-spacing: 1px;">
+                              SECURE AUTHENTICATION PORTAL
+                            </p>
+                          </td>
+                        </tr>
+                        
+                        <!-- Content -->
+                        <tr>
+                          <td style="padding: 40px 30px;">
+                            <h2 style="color: #f1f5f9; margin: 0 0 20px; font-size: 20px; font-weight: 600;">
+                              🔐 Authentication Code
+                            </h2>
+                            <p style="color: #cbd5e1; margin: 0 0 30px; font-size: 15px; line-height: 1.6;">
+                              A login attempt has been initiated for your account. Use the verification code below to complete authentication:
+                            </p>
+                            
+                            <!-- OTP Code Box -->
+                            <div style="background: linear-gradient(135deg, #1e40af 0%, #0891b2 100%); border-radius: 12px; padding: 30px; text-align: center; margin: 30px 0; box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3); border: 2px solid rgba(59, 130, 246, 0.3);">
+                              <div style="color: rgba(255, 255, 255, 0.7); font-size: 12px; letter-spacing: 2px; margin-bottom: 10px; font-weight: 600;">
+                                VERIFICATION CODE
+                              </div>
+                              <div style="color: white; font-size: 42px; font-weight: 700; letter-spacing: 12px; font-family: 'Courier New', monospace; text-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+                                {otp}
+                              </div>
+                            </div>
+                            
+                            <!-- Security Info -->
+                            <div style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 15px; margin: 30px 0; border-radius: 4px;">
+                              <p style="color: #fca5a5; margin: 0; font-size: 13px; line-height: 1.6;">
+                                <strong>⚠️ Security Notice:</strong> This code expires in <strong>10 minutes</strong>. Never share this code with anyone. SOC Dashboard staff will never ask for your verification code.
+                              </p>
+                            </div>
+                            
+                            <!-- Additional Info -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 30px;">
+                              <tr>
+                                <td style="padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                                  <table width="100%" cellpadding="0" cellspacing="0">
+                                    <tr>
+                                      <td width="30" valign="top">
+                                        <div style="width: 24px; height: 24px; background: rgba(59, 130, 246, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                          <span style="color: #60a5fa; font-size: 14px;">🕐</span>
+                                        </div>
+                                      </td>
+                                      <td style="padding-left: 12px;">
+                                        <p style="color: #94a3b8; margin: 0; font-size: 13px; line-height: 1.5;">
+                                          <strong style="color: #e2e8f0;">Valid for:</strong> 10 minutes from receipt
+                                        </p>
+                                      </td>
+                                    </tr>
+                                  </table>
+                                </td>
+                              </tr>
+                              <tr><td style="height: 10px;"></td></tr>
+                              <tr>
+                                <td style="padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                                  <table width="100%" cellpadding="0" cellspacing="0">
+                                    <tr>
+                                      <td width="30" valign="top">
+                                        <div style="width: 24px; height: 24px; background: rgba(59, 130, 246, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                          <span style="color: #60a5fa; font-size: 14px;">🔒</span>
+                                        </div>
+                                      </td>
+                                      <td style="padding-left: 12px;">
+                                        <p style="color: #94a3b8; margin: 0; font-size: 13px; line-height: 1.5;">
+                                          <strong style="color: #e2e8f0;">Security:</strong> One-time use only, encrypted transmission
+                                        </p>
+                                      </td>
+                                    </tr>
+                                  </table>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        
+                        <!-- Footer -->
+                        <tr>
+                          <td style="background: #0f172a; padding: 30px; text-align: center; border-top: 1px solid rgba(59, 130, 246, 0.2);">
+                            <p style="color: #64748b; margin: 0 0 10px; font-size: 12px;">
+                              If you didn't request this code, please ignore this email or contact your security administrator.
+                            </p>
+                            <p style="color: #475569; margin: 0; font-size: 11px;">
+                              © 2025 SOC Dashboard | Enterprise Security Operations Center
+                            </p>
+                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(71, 85, 105, 0.3);">
+                              <p style="color: #475569; margin: 0; font-size: 10px; letter-spacing: 0.5px;">
+                                CONFIDENTIAL - This email contains sensitive security information
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </body>
+            </html>
+            """
+            
+            msg.attach(MIMEText(html, 'html'))
+            
+            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                server.starttls()
+                server.login(self.smtp_username, self.smtp_password)
+                server.send_message(msg)
+            
+            return True, "OTP sent successfully"
+        except Exception as e:
+            return False, f"Failed to send email: {str(e)}"
+    
+    def verify_email_otp(self, email: str, otp: str) -> Tuple[bool, str]:
+        """Verify email OTP"""
+        if email not in self.email_otps:
+            return False, "No OTP found for this email"
+        
+        otp_data = self.email_otps[email]
+        
+        # Check expiry
+        if datetime.now() > otp_data['expires']:
+            del self.email_otps[email]
+            return False, "OTP expired"
+        
+        # Check attempts (max 3)
+        if otp_data['attempts'] >= 3:
+            del self.email_otps[email]
+            return False, "Too many failed attempts"
+        
+        # Verify OTP
+        if otp != otp_data['otp']:
+            otp_data['attempts'] += 1
+            return False, "Invalid OTP"
+        
+        # Success - remove OTP
+        del self.email_otps[email]
+        return True, "OTP verified successfully"
+    
+    def request_passwordless_login(self, email: str) -> Tuple[bool, str]:
+        """Request passwordless login via email OTP"""
+        users = self._load_users()
+        
+        # Find user by email
+        user_found = None
+        username = None
+        for uname, user_data in users.items():
+            if user_data.get('email') == email:
+                user_found = user_data
+                username = uname
+                break
+        
+        if not user_found:
+            # Don't reveal if email exists (security)
+            return True, "If this email is registered, you will receive a login code"
+        
+        if not user_found.get('active', True):
+            return False, "Account is disabled"
+        
+        # Generate and send OTP
+        otp = self.generate_email_otp(email)
+        success, message = self.send_email_otp(email, otp)
+        
+        if success:
+            return True, "Login code sent to your email"
+        else:
+            return False, message
+    
+    def authenticate_with_email_otp(self, email: str, otp: str) -> Tuple[bool, str, Dict]:
+        """Authenticate user with email OTP"""
+        # Verify OTP first
+        valid, message = self.verify_email_otp(email, otp)
+        if not valid:
+            return False, message, {}
+        
+        users = self._load_users()
+        
+        # Find user by email
+        for username, user_data in users.items():
+            if user_data.get('email') == email:
+                # Mark email as verified
+                user_data['email_verified'] = True
+                user_data['last_login'] = datetime.now().isoformat()
+                self._save_users(users)
+                
+                user_info = {
+                    'username': username,
+                    'role': user_data['role'],
+                    'email': user_data['email'],
+                    'mfa_enabled': user_data.get('mfa_enabled', False),
+                    'last_login': user_data['last_login']
+                }
+                
+                return True, "Authentication successful", user_info
+        
+        return False, "User not found", {}
+    
+    # ============ Passkey/WebAuthn Methods ============
+    
+    def _encode_bytes(self, data):
+        """Helper to encode bytes or return as-is if already string"""
+        if isinstance(data, bytes):
+            return base64.b64encode(data).decode()
+        elif isinstance(data, str):
+            return data
+        return str(data)
+    
+    def begin_passkey_registration(self, username: str) -> Tuple[bool, Dict, str]:
+        """Begin passkey registration process"""
+        users = self._load_users()
+        
+        if username not in users:
+            return False, {}, "User not found"
+        
+        user = users[username]
+        
+        # Create user handle (unique identifier)
+        user_handle = username.encode('utf-8')
+        
+        # Get existing credentials
+        existing_credentials = [
+            cbor.decode(base64.b64decode(pk['credential_data']))
+            for pk in user.get('passkeys', [])
+        ]
+        
+        # Generate registration options
+        registration_data, state = self.fido2_server.register_begin(
+            {
+                'id': user_handle,
+                'name': username,
+                'displayName': user.get('email', username)
+            },
+            existing_credentials,
+            user_verification=UserVerificationRequirement.PREFERRED
+        )
+        
+        # Convert to JSON-serializable format
+        options = {
+            'publicKey': {
+                'challenge': self._encode_bytes(registration_data['publicKey']['challenge']),
+                'rp': registration_data['publicKey']['rp'],
+                'user': {
+                    'id': self._encode_bytes(registration_data['publicKey']['user']['id']),
+                    'name': registration_data['publicKey']['user']['name'],
+                    'displayName': registration_data['publicKey']['user']['displayName']
+                },
+                'pubKeyCredParams': registration_data['publicKey']['pubKeyCredParams'],
+                'timeout': registration_data['publicKey'].get('timeout', 60000),
+                'attestation': registration_data['publicKey'].get('attestation', 'none'),
+                'authenticatorSelection': registration_data['publicKey'].get('authenticatorSelection', {})
+            }
+        }
+        
+        # Store state temporarily (use Redis in production)
+        state_id = secrets.token_urlsafe(32)
+        if not hasattr(self, '_passkey_states'):
+            self._passkey_states = {}
+        self._passkey_states[state_id] = {
+            'state': state,
+            'username': username,
+            'expires': datetime.now() + timedelta(minutes=5)
+        }
+        
+        return True, options, state_id
+    
+    def complete_passkey_registration(self, state_id: str, credential_data: Dict) -> Tuple[bool, str]:
+        """Complete passkey registration"""
+        if not hasattr(self, '_passkey_states') or state_id not in self._passkey_states:
+            return False, "Invalid or expired registration session"
+        
+        state_info = self._passkey_states[state_id]
+        
+        # Check expiry
+        if datetime.now() > state_info['expires']:
+            del self._passkey_states[state_id]
+            return False, "Registration session expired"
+        
+        username = state_info['username']
+        state = state_info['state']
+        
+        try:
+            # Decode challenge
+            credential_data['response']['clientDataJSON'] = base64.b64decode(
+                credential_data['response']['clientDataJSON']
+            )
+            credential_data['response']['attestationObject'] = base64.b64decode(
+                credential_data['response']['attestationObject']
+            )
+            credential_data['rawId'] = base64.b64decode(credential_data['rawId'])
+            
+            # Complete registration
+            auth_data = self.fido2_server.register_complete(state, credential_data)
+            
+            # Store credential
+            users = self._load_users()
+            if username not in users:
+                return False, "User not found"
+            
+            if 'passkeys' not in users[username]:
+                users[username]['passkeys'] = []
+            
+            passkey_entry = {
+                'credential_id': base64.b64encode(auth_data.credential_data.credential_id).decode(),
+                'credential_data': base64.b64encode(cbor.encode(auth_data.credential_data)).decode(),
+                'name': f"Passkey {len(users[username]['passkeys']) + 1}",
+                'created_at': datetime.now().isoformat()
+            }
+            
+            users[username]['passkeys'].append(passkey_entry)
+            self._save_users(users)
+            
+            # Clean up state
+            del self._passkey_states[state_id]
+            
+            return True, "Passkey registered successfully"
+        
+        except Exception as e:
+            return False, f"Registration failed: {str(e)}"
+    
+    def begin_passkey_authentication(self, username: str) -> Tuple[bool, Dict, str]:
+        """Begin passkey authentication"""
+        users = self._load_users()
+        
+        if username not in users:
+            return False, {}, "User not found"
+        
+        user = users[username]
+        passkeys = user.get('passkeys', [])
+        
+        if not passkeys:
+            return False, {}, "No passkeys registered"
+        
+        # Get credentials
+        credentials = [
+            cbor.decode(base64.b64decode(pk['credential_data']))
+            for pk in passkeys
+        ]
+        
+        # Generate authentication options
+        auth_data, state = self.fido2_server.authenticate_begin(
+            credentials,
+            user_verification=UserVerificationRequirement.PREFERRED
+        )
+        
+        # Convert to JSON-serializable format
+        options = {
+            'publicKey': {
+                'challenge': self._encode_bytes(auth_data['publicKey']['challenge']),
+                'timeout': auth_data['publicKey'].get('timeout', 60000),
+                'rpId': auth_data['publicKey']['rpId'],
+                'allowCredentials': [
+                    {
+                        'type': cred['type'],
+                        'id': self._encode_bytes(cred['id'])
+                    }
+                    for cred in auth_data['publicKey']['allowCredentials']
+                ],
+                'userVerification': auth_data['publicKey'].get('userVerification', 'preferred')
+            }
+        }
+        
+        # Store state
+        state_id = secrets.token_urlsafe(32)
+        if not hasattr(self, '_passkey_auth_states'):
+            self._passkey_auth_states = {}
+        self._passkey_auth_states[state_id] = {
+            'state': state,
+            'username': username,
+            'expires': datetime.now() + timedelta(minutes=5)
+        }
+        
+        return True, options, state_id
+    
+    def complete_passkey_authentication(self, state_id: str, credential_data: Dict) -> Tuple[bool, str, Dict]:
+        """Complete passkey authentication"""
+        if not hasattr(self, '_passkey_auth_states') or state_id not in self._passkey_auth_states:
+            return False, "Invalid or expired authentication session", {}
+        
+        state_info = self._passkey_auth_states[state_id]
+        
+        # Check expiry
+        if datetime.now() > state_info['expires']:
+            del self._passkey_auth_states[state_id]
+            return False, "Authentication session expired", {}
+        
+        username = state_info['username']
+        state = state_info['state']
+        
+        try:
+            # Decode response data
+            credential_data['response']['clientDataJSON'] = base64.b64decode(
+                credential_data['response']['clientDataJSON']
+            )
+            credential_data['response']['authenticatorData'] = base64.b64decode(
+                credential_data['response']['authenticatorData']
+            )
+            credential_data['response']['signature'] = base64.b64decode(
+                credential_data['response']['signature']
+            )
+            credential_data['rawId'] = base64.b64decode(credential_data['rawId'])
+            
+            # Get user credentials
+            users = self._load_users()
+            user = users[username]
+            credentials = [
+                cbor.decode(base64.b64decode(pk['credential_data']))
+                for pk in user.get('passkeys', [])
+            ]
+            
+            # Complete authentication
+            self.fido2_server.authenticate_complete(
+                state,
+                credentials,
+                credential_data
+            )
+            
+            # Update last login
+            user['last_login'] = datetime.now().isoformat()
+            self._save_users(users)
+            
+            # Clean up state
+            del self._passkey_auth_states[state_id]
+            
+            user_info = {
+                'username': username,
+                'role': user['role'],
+                'email': user['email'],
+                'mfa_enabled': user.get('mfa_enabled', False),
+                'last_login': user['last_login']
+            }
+            
+            return True, "Authentication successful", user_info
+        
+        except Exception as e:
+            return False, f"Authentication failed: {str(e)}", {}
+    
+    def list_passkeys(self, username: str) -> List[Dict]:
+        """List user's registered passkeys"""
+        users = self._load_users()
+        
+        if username not in users:
+            return []
+        
+        passkeys = users[username].get('passkeys', [])
+        
+        return [
+            {
+                'id': pk['credential_id'],
+                'name': pk['name'],
+                'created_at': pk['created_at']
+            }
+            for pk in passkeys
+        ]
+    
+    def delete_passkey(self, username: str, credential_id: str) -> Tuple[bool, str]:
+        """Delete a passkey"""
+        users = self._load_users()
+        
+        if username not in users:
+            return False, "User not found"
+        
+        passkeys = users[username].get('passkeys', [])
+        
+        # Find and remove passkey
+        updated_passkeys = [pk for pk in passkeys if pk['credential_id'] != credential_id]
+        
+        if len(updated_passkeys) == len(passkeys):
+            return False, "Passkey not found"
+        
+        users[username]['passkeys'] = updated_passkeys
+        self._save_users(users)
+        
+        return True, "Passkey deleted successfully"
 
 # Authentication decorators
 def token_required(f):
