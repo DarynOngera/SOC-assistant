@@ -97,10 +97,10 @@ const ReportsList = ({ onSelectReport }) => {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-lg p-6">
         <div className="flex items-center justify-center py-8">
           <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mr-3" />
-          <p className="text-gray-600">Loading reports...</p>
+          <p className="text-gray-400">Loading reports...</p>
         </div>
       </div>
     );
@@ -108,7 +108,7 @@ const ReportsList = ({ onSelectReport }) => {
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-lg p-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-start">
             <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 mr-3" />
@@ -129,13 +129,13 @@ const ReportsList = ({ onSelectReport }) => {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg">
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-lg">
       {/* Header */}
-      <div className="border-b border-gray-200 p-6">
+      <div className="border-b border-slate-700/50 p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Analysis Reports</h2>
-            <p className="text-gray-600 mt-1">
+            <h2 className="text-2xl font-bold text-white">Analysis Reports</h2>
+            <p className="text-gray-400 mt-1">
               {reports.length} report{reports.length !== 1 ? 's' : ''} available
             </p>
           </div>
@@ -157,7 +157,7 @@ const ReportsList = ({ onSelectReport }) => {
               placeholder="Search by filename or report ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-slate-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="relative">
@@ -165,7 +165,7 @@ const ReportsList = ({ onSelectReport }) => {
             <select
               value={filterBy}
               onChange={(e) => setFilterBy(e.target.value)}
-              className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+              className="pl-10 pr-8 py-2 border border-slate-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-slate-800/50 backdrop-blur-sm"
             >
               <option value="all">All Reports</option>
               <option value="high-anomaly">High Anomaly ({'>'}10%)</option>
@@ -181,17 +181,17 @@ const ReportsList = ({ onSelectReport }) => {
         {filteredAndSortedReports.length === 0 ? (
           <div className="text-center py-8">
             <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">
+            <p className="text-gray-400">
               {searchTerm || filterBy !== 'all' ? 'No reports match your criteria' : 'No reports available'}
             </p>
           </div>
         ) : (
           <div className="space-y-4">
             {/* Table Header */}
-            <div className="hidden md:grid md:grid-cols-6 gap-4 pb-2 border-b border-gray-200 text-sm font-medium text-gray-500">
+            <div className="hidden md:grid md:grid-cols-6 gap-4 pb-2 border-b border-slate-700/50 text-sm font-medium text-gray-400">
               <button
                 onClick={() => handleSort('file_name')}
-                className="text-left flex items-center hover:text-gray-700"
+                className="text-left flex items-center hover:text-gray-300"
               >
                 File Name
                 {sortBy === 'file_name' && (
@@ -200,7 +200,7 @@ const ReportsList = ({ onSelectReport }) => {
               </button>
               <button
                 onClick={() => handleSort('timestamp')}
-                className="text-left flex items-center hover:text-gray-700"
+                className="text-left flex items-center hover:text-gray-300"
               >
                 Date
                 {sortBy === 'timestamp' && (
@@ -209,7 +209,7 @@ const ReportsList = ({ onSelectReport }) => {
               </button>
               <button
                 onClick={() => handleSort('total_records')}
-                className="text-left flex items-center hover:text-gray-700"
+                className="text-left flex items-center hover:text-gray-300"
               >
                 Records
                 {sortBy === 'total_records' && (
@@ -218,7 +218,7 @@ const ReportsList = ({ onSelectReport }) => {
               </button>
               <button
                 onClick={() => handleSort('anomalies_detected')}
-                className="text-left flex items-center hover:text-gray-700"
+                className="text-left flex items-center hover:text-gray-300"
               >
                 Anomalies
                 {sortBy === 'anomalies_detected' && (
@@ -227,7 +227,7 @@ const ReportsList = ({ onSelectReport }) => {
               </button>
               <button
                 onClick={() => handleSort('anomaly_percentage')}
-                className="text-left flex items-center hover:text-gray-700"
+                className="text-left flex items-center hover:text-gray-300"
               >
                 Rate
                 {sortBy === 'anomaly_percentage' && (
@@ -241,26 +241,26 @@ const ReportsList = ({ onSelectReport }) => {
             {filteredAndSortedReports.map((report) => (
               <div
                 key={report.report_id}
-                className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors"
+                className="bg-slate-900/50 rounded-lg p-4 hover:bg-slate-700/50 transition-colors"
               >
                 <div className="md:grid md:grid-cols-6 gap-4 items-center">
                   {/* File Name - Mobile/Desktop */}
                   <div className="mb-2 md:mb-0">
                     <div className="flex items-center">
                       <FileText className="w-4 h-4 text-gray-400 mr-2" />
-                      <span className="font-medium text-gray-900 truncate">
+                      <span className="font-medium text-white truncate">
                         {report.file_name}
                       </span>
                     </div>
-                    <div className="md:hidden text-xs text-gray-500 mt-1">
+                    <div className="md:hidden text-xs text-gray-400 mt-1">
                       ID: {report.report_id.substring(0, 8)}...
                     </div>
                   </div>
 
                   {/* Date */}
                   <div className="mb-2 md:mb-0">
-                    <div className="md:hidden text-xs text-gray-500 mb-1">Date:</div>
-                    <div className="flex items-center text-sm text-gray-600">
+                    <div className="md:hidden text-xs text-gray-400 mb-1">Date:</div>
+                    <div className="flex items-center text-sm text-gray-400">
                       <Calendar className="w-4 h-4 mr-1 md:hidden" />
                       {formatDate(report.timestamp)}
                     </div>
@@ -268,15 +268,15 @@ const ReportsList = ({ onSelectReport }) => {
 
                   {/* Records */}
                   <div className="mb-2 md:mb-0">
-                    <div className="md:hidden text-xs text-gray-500 mb-1">Records:</div>
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="md:hidden text-xs text-gray-400 mb-1">Records:</div>
+                    <div className="text-sm font-medium text-white">
                       {formatNumber(report.total_records)}
                     </div>
                   </div>
 
                   {/* Anomalies */}
                   <div className="mb-2 md:mb-0">
-                    <div className="md:hidden text-xs text-gray-500 mb-1">Anomalies:</div>
+                    <div className="md:hidden text-xs text-gray-400 mb-1">Anomalies:</div>
                     <div className="text-sm font-medium text-red-600">
                       {formatNumber(report.anomalies_detected)}
                     </div>
@@ -284,7 +284,7 @@ const ReportsList = ({ onSelectReport }) => {
 
                   {/* Rate */}
                   <div className="mb-2 md:mb-0">
-                    <div className="md:hidden text-xs text-gray-500 mb-1">Rate:</div>
+                    <div className="md:hidden text-xs text-gray-400 mb-1">Rate:</div>
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getSeverityColor(report.anomaly_percentage)}`}>
                       {report.anomaly_percentage.toFixed(2)}%
                     </span>

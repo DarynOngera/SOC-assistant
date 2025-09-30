@@ -9,7 +9,10 @@ import AttackTrends from './components/AttackTrends';
 import ThreatTriage from './components/ThreatTriage';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
+import EnhancedLogin from './components/EnhancedLogin';
 import MFASetup from './components/MFASetup';
+import PasskeySetup from './components/PasskeySetup';
+import AuthPreferences from './components/AuthPreferences';
 import AuditLogs from './components/AuditLogs';
 import AuditExport from './components/AuditExport';
 import CSVAnalysis from './components/CSVAnalysis';
@@ -253,15 +256,17 @@ function App() {
         )}
 
         {/* Sidebar */}
-        <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
+        <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-slate-900 to-slate-800 shadow-2xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'}`}>
           {/* Sidebar Header */}
-          <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
+          <div className="flex items-center justify-between h-16 px-4 border-b border-slate-700/50">
             <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : ''}`}>
-              <Shield className="h-8 w-8 text-indigo-600" />
+              <div className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 rounded-lg shadow-lg shadow-blue-500/30">
+                <Shield className="h-5 w-5 text-white" />
+              </div>
               {!sidebarCollapsed && (
-                <span className="ml-2 text-xl font-bold text-gray-900 lg:block">
+                <span className="ml-3 text-xl font-bold text-white lg:block">
                   SOC Dashboard
                 </span>
               )}
@@ -270,7 +275,7 @@ function App() {
             {/* Mobile close button */}
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200 active:scale-95"
+              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-white hover:bg-slate-700/50 transition-all duration-200 active:scale-95"
               aria-label="Close navigation menu"
             >
               <X className="h-6 w-6 transition-transform duration-200" />
@@ -279,7 +284,7 @@ function App() {
             {/* Desktop collapse button */}
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="hidden lg:block p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200"
+              className="hidden lg:block p-1 rounded-md text-gray-400 hover:text-white hover:bg-slate-700/50 transition-all duration-200"
               title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {sidebarCollapsed ? (
@@ -301,10 +306,10 @@ function App() {
                     setCurrentView(item.id);
                     setSidebarOpen(false); // Close mobile sidebar on selection
                   }}
-                  className={`w-full flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors group ${
+                  className={`w-full flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group ${
                     currentView === item.id
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                      ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/30'
+                      : 'text-gray-300 hover:text-white hover:bg-slate-700/50'
                   } ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
                   title={sidebarCollapsed ? item.label : ''}
                 >
@@ -313,7 +318,7 @@ function App() {
                     <span className="ml-3 lg:block">{item.label}</span>
                   )}
                   {sidebarCollapsed && (
-                    <span className="absolute left-16 bg-gray-900 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap">
+                    <span className="absolute left-16 bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap shadow-xl border border-slate-700">
                       {item.label}
                     </span>
                   )}
@@ -323,14 +328,14 @@ function App() {
           </nav>
 
           {/* User Info and Status */}
-          <div className="border-t border-gray-200 p-4">
+          <div className="border-t border-slate-700/50 p-4 bg-slate-900/50">
             {/* Connection Status */}
             <div className={`flex items-center mb-3 ${sidebarCollapsed ? 'lg:justify-center' : ''}`}>
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                isConnected ? 'bg-green-500' : 'bg-red-500'
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 animate-pulse ${
+                isConnected ? 'bg-green-400 shadow-lg shadow-green-400/50' : 'bg-red-400 shadow-lg shadow-red-400/50'
               }`}></div>
               {!sidebarCollapsed && (
-                <span className="ml-2 text-sm text-gray-600 lg:block">
+                <span className="ml-2 text-sm text-gray-300 lg:block">
                   {isConnected ? 'Connected' : 'Disconnected'}
                 </span>
               )}
@@ -338,9 +343,9 @@ function App() {
             
             {/* User Info */}
             {!sidebarCollapsed && (
-              <div className="text-sm text-gray-600 mb-3 lg:block">
-                <div className="font-medium">{user.username}</div>
-                <div className="text-xs bg-gray-100 px-2 py-1 rounded capitalize inline-block mt-1">
+              <div className="text-sm text-gray-300 mb-3 lg:block">
+                <div className="font-medium text-white">{user.username}</div>
+                <div className="text-xs bg-blue-600/20 text-blue-300 px-2 py-1 rounded capitalize inline-block mt-1 border border-blue-500/30">
                   {user.role}
                 </div>
               </div>
@@ -349,7 +354,7 @@ function App() {
             {/* Logout Button */}
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors ${
+              className={`w-full flex items-center px-3 py-2 text-sm text-red-400 hover:text-white hover:bg-red-600/20 rounded-lg transition-all duration-200 border border-transparent hover:border-red-500/30 ${
                 sidebarCollapsed ? 'lg:justify-center lg:px-2' : ''
               }`}
               title={sidebarCollapsed ? 'Logout' : ''}
@@ -369,11 +374,11 @@ function App() {
     if (!user) return null;
     
     return (
-      <div className="bg-white shadow-sm border-b lg:hidden sticky top-0 z-30">
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 shadow-lg border-b border-slate-700/50 lg:hidden sticky top-0 z-30">
         <div className="flex items-center justify-between h-16 px-4">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 active:scale-95"
+            className="p-2 rounded-md text-gray-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200 active:scale-95"
             aria-label="Open navigation menu"
           >
             <div className="relative">
@@ -382,8 +387,10 @@ function App() {
           </button>
           
           <div className="flex items-center">
-            <Shield className="h-6 w-6 text-indigo-600 mr-2" />
-            <span className="text-lg font-bold text-gray-900">SOC</span>
+            <div className="bg-gradient-to-br from-blue-500 to-cyan-500 p-1.5 rounded-lg shadow-lg shadow-blue-500/30">
+              <Shield className="h-5 w-5 text-white" />
+            </div>
+            <span className="ml-2 text-lg font-bold text-white">SOC</span>
           </div>
           
           <div className="w-10"> {/* Spacer for balance */}</div>
@@ -400,8 +407,8 @@ function App() {
         return (
           <div className="space-y-8">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Threat Analysis</h2>
-              <p className="text-gray-600 mb-8">
+              <h2 className="text-2xl font-bold text-white mb-6">Threat Analysis</h2>
+              <p className="text-gray-300 mb-8">
                 Comprehensive analysis of attack patterns, trends, and distribution for enhanced threat intelligence.
               </p>
             </div>
@@ -417,8 +424,8 @@ function App() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Threat Triage</h2>
-              <p className="text-gray-600 mb-8">
+              <h2 className="text-2xl font-bold text-white mb-6">Threat Triage</h2>
+              <p className="text-gray-300 mb-8">
                 Prioritized threat analysis with intelligent scoring for efficient incident response.
               </p>
             </div>
@@ -435,9 +442,18 @@ function App() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Settings</h2>
+              <h2 className="text-2xl font-bold text-white mb-6">Security Settings</h2>
+              <p className="text-gray-300 mb-8">
+                Manage your authentication methods and security preferences.
+              </p>
             </div>
+            <AuthPreferences user={user} onPreferenceChange={(key, value) => {
+              if (key === 'mfa_enabled') {
+                handleMFAChange(value);
+              }
+            }} />
             <MFASetup user={user} onMFAChange={handleMFAChange} />
+            <PasskeySetup user={user} />
           </div>
         );
       case 'dashboard':
@@ -471,14 +487,14 @@ function App() {
                 <AttackDistribution />
               </div>
               <div className="lg:col-span-1 xl:col-span-1">
-                <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-                  <h4 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Quick Triage</h4>
-                  <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4">
+                <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-xl border border-slate-700/50 p-4 sm:p-6">
+                  <h4 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Quick Triage</h4>
+                  <p className="text-xs sm:text-sm text-gray-300 mb-3 sm:mb-4">
                     High-priority threats requiring immediate attention
                   </p>
                   <button
                     onClick={() => setCurrentView('threat-triage')}
-                    className="w-full bg-indigo-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm sm:text-base"
+                    className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg hover:from-blue-700 hover:to-cyan-700 transition-all duration-200 text-sm sm:text-base shadow-lg shadow-blue-500/30"
                   >
                     View Threat Triage
                   </button>
@@ -500,10 +516,10 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900 flex items-center justify-center">
         <div className="flex items-center space-x-2">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          <span className="text-gray-600">Loading SOC Dashboard...</span>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <span className="text-gray-300">Loading SOC Dashboard...</span>
         </div>
       </div>
     );
@@ -511,16 +527,16 @@ function App() {
 
   // Show login if not authenticated
   if (!user) {
-    return <Login onLogin={handleLogin} loading={loading} />;
+    return <EnhancedLogin onLogin={handleLogin} loading={loading} />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 lg:flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900 lg:flex">
       {renderSidebar()}
       {renderTopBar()}
       
       <div className="flex-1 flex flex-col">
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 backdrop-blur-sm">
           <div className="max-w-7xl mx-auto">
             {renderContent()}
           </div>
@@ -531,7 +547,7 @@ function App() {
           <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
             <button
               onClick={startMonitoring}
-              className="bg-green-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg shadow-lg hover:bg-green-700 flex items-center text-sm sm:text-base"
+              className="bg-green-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg shadow-lg shadow-green-500/30 hover:bg-green-700 hover:shadow-green-500/50 flex items-center text-sm sm:text-base transition-all duration-200 border border-green-500/30"
             >
               <Activity className="h-4 w-4 mr-1 sm:mr-2" />
               <span className="hidden sm:inline">Start Monitoring</span>
@@ -539,7 +555,7 @@ function App() {
             </button>
             <button
               onClick={stopMonitoring}
-              className="bg-red-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg shadow-lg hover:bg-red-700 flex items-center text-sm sm:text-base"
+              className="bg-red-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg shadow-lg shadow-red-500/30 hover:bg-red-700 hover:shadow-red-500/50 flex items-center text-sm sm:text-base transition-all duration-200 border border-red-500/30"
             >
               <AlertTriangle className="h-4 w-4 mr-1 sm:mr-2" />
               <span className="hidden sm:inline">Stop Monitoring</span>

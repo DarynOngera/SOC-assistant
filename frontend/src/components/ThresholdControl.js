@@ -43,14 +43,14 @@ const ThresholdControl = ({ threshold, onThresholdChange }) => {
   return (
     <div className="space-y-6">
       <div className="flex items-center space-x-2">
-        <Sliders className="h-5 w-5 text-gray-600" />
-        <h3 className="text-lg font-semibold text-gray-900">Detection Threshold</h3>
+        <Sliders className="h-5 w-5 text-gray-400" />
+        <h3 className="text-lg font-semibold text-white">Detection Threshold</h3>
       </div>
 
       <div className="space-y-4">
         {/* Current Threshold Display */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">Current Threshold:</span>
+          <span className="text-sm text-gray-400">Current Threshold:</span>
           <div className="flex items-center space-x-2">
             <span className={`text-2xl font-bold ${getThresholdColor(threshold)}`}>
               {threshold.toFixed(2)}
@@ -63,7 +63,7 @@ const ThresholdControl = ({ threshold, onThresholdChange }) => {
 
         {/* Threshold Slider */}
         <div className="space-y-2">
-          <div className="flex justify-between text-xs text-gray-500">
+          <div className="flex justify-between text-xs text-gray-400">
             <span>0.0</span>
             <span>0.5</span>
             <span>1.0</span>
@@ -84,7 +84,7 @@ const ThresholdControl = ({ threshold, onThresholdChange }) => {
               }}
             />
             <div
-              className="absolute top-0 w-4 h-4 bg-white border-2 border-gray-400 rounded-full shadow-md transform -translate-y-1 cursor-pointer"
+              className="absolute top-0 w-4 h-4 bg-slate-800/50 backdrop-blur-sm border-2 border-gray-400 rounded-full shadow-md transform -translate-y-1 cursor-pointer"
               style={{
                 left: `calc(${localThreshold * 100}% - 8px)`,
                 borderColor: getThresholdColor(localThreshold).includes('danger') ? '#ef4444' :
@@ -93,17 +93,17 @@ const ThresholdControl = ({ threshold, onThresholdChange }) => {
               }}
             />
           </div>
-          <div className="flex justify-between text-xs text-gray-500">
+          <div className="flex justify-between text-xs text-gray-400">
             <span>High Sensitivity</span>
             <span>Low Sensitivity</span>
           </div>
         </div>
 
         {/* Threshold Impact */}
-        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+        <div className="bg-slate-900/50 rounded-lg p-4 space-y-3">
           <div className="flex items-start space-x-2">
             <Info className="h-4 w-4 text-primary-600 mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-gray-700">
+            <div className="text-sm text-gray-300">
               <p className="font-medium mb-1">Threshold Impact:</p>
               <ul className="space-y-1 text-xs">
                 <li>• <strong>Lower values (0.0-0.4):</strong> More sensitive, catches more anomalies but may increase false positives</li>

@@ -15,9 +15,9 @@ const ReportViewer = ({ report, onClose }) => {
 
   if (!report) {
     return (
-      <div className="bg-white rounded-lg shadow-lg p-6 text-center">
+      <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-lg p-6 text-center">
         <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <p className="text-gray-600">No report selected</p>
+        <p className="text-gray-400">No report selected</p>
       </div>
     );
   }
@@ -120,8 +120,8 @@ const ReportViewer = ({ report, onClose }) => {
       </div>
 
       {/* File Information */}
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">File Information</h3>
+      <div className="bg-slate-900/50 p-4 rounded-lg">
+        <h3 className="text-lg font-semibold text-white mb-3">File Information</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
             <p><strong>Filename:</strong> {report.file_info.filename}</p>
@@ -135,37 +135,37 @@ const ReportViewer = ({ report, onClose }) => {
       </div>
 
       {/* Model Performance */}
-      <div className="bg-white border rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Model Performance</h3>
+      <div className="bg-slate-800/50 backdrop-blur-sm border rounded-lg p-4">
+        <h3 className="text-lg font-semibold text-white mb-3">Model Performance</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="text-center p-3 bg-blue-50 rounded">
             <p className="text-2xl font-bold text-blue-600">
               {report.summary_statistics.model_performance.high_confidence_anomalies}
             </p>
             <p className="text-sm text-blue-700">High Confidence</p>
-            <p className="text-xs text-gray-600">(Score {'>'}  0.8)</p>
+            <p className="text-xs text-gray-400">(Score {'>'}  0.8)</p>
           </div>
           <div className="text-center p-3 bg-yellow-50 rounded">
             <p className="text-2xl font-bold text-yellow-600">
               {report.summary_statistics.model_performance.medium_confidence_anomalies}
             </p>
             <p className="text-sm text-yellow-700">Medium Confidence</p>
-            <p className="text-xs text-gray-600">(Score 0.5-0.8)</p>
+            <p className="text-xs text-gray-400">(Score 0.5-0.8)</p>
           </div>
-          <div className="text-center p-3 bg-gray-50 rounded">
-            <p className="text-2xl font-bold text-gray-600">
+          <div className="text-center p-3 bg-slate-900/50 rounded">
+            <p className="text-2xl font-bold text-gray-400">
               {report.summary_statistics.model_performance.low_confidence_anomalies}
             </p>
-            <p className="text-sm text-gray-700">Low Confidence</p>
-            <p className="text-xs text-gray-600">(Score 0.3-0.5)</p>
+            <p className="text-sm text-gray-300">Low Confidence</p>
+            <p className="text-xs text-gray-400">(Score 0.3-0.5)</p>
           </div>
         </div>
       </div>
 
       {/* Visualization */}
       {report.visualizations && report.visualizations.main_analysis && (
-        <div className="bg-white border rounded-lg p-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Analysis Visualization</h3>
+        <div className="bg-slate-800/50 backdrop-blur-sm border rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-white mb-3">Analysis Visualization</h3>
           <div className="text-center">
             <img 
               src={`data:image/png;base64,${report.visualizations.main_analysis}`}
@@ -194,7 +194,7 @@ const ReportViewer = ({ report, onClose }) => {
 
       <div className="space-y-3">
         {report.recommendations.map((recommendation, index) => (
-          <div key={index} className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+          <div key={index} className="bg-slate-800/50 backdrop-blur-sm border rounded-lg p-4 hover:shadow-md transition-shadow">
             <div className="flex items-start">
               <div className="bg-blue-100 rounded-full p-2 mr-3 mt-1">
                 <span className="text-blue-600 font-semibold text-sm">{index + 1}</span>
@@ -210,8 +210,8 @@ const ReportViewer = ({ report, onClose }) => {
   const renderDetailsTab = () => (
     <div className="space-y-6">
       {/* Data Quality Assessment */}
-      <div className="bg-white border rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Data Quality Assessment</h3>
+      <div className="bg-slate-800/50 backdrop-blur-sm border rounded-lg p-4">
+        <h3 className="text-lg font-semibold text-white mb-3">Data Quality Assessment</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
             <p><strong>Original Records:</strong> {formatNumber(report.detailed_analysis.data_quality_assessment.original_records)}</p>
@@ -233,8 +233,8 @@ const ReportViewer = ({ report, onClose }) => {
       </div>
 
       {/* Anomaly Patterns */}
-      <div className="bg-white border rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Anomaly Patterns</h3>
+      <div className="bg-slate-800/50 backdrop-blur-sm border rounded-lg p-4">
+        <h3 className="text-lg font-semibold text-white mb-3">Anomaly Patterns</h3>
         <div className="space-y-2 text-sm">
           <p><strong>Distribution Type:</strong> {report.detailed_analysis.anomaly_patterns.distribution_type}</p>
           <p><strong>Score Concentration:</strong> {report.detailed_analysis.anomaly_patterns.score_concentration}</p>
@@ -251,24 +251,24 @@ const ReportViewer = ({ report, onClose }) => {
       </div>
 
       {/* Score Statistics */}
-      <div className="bg-white border rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Score Statistics</h3>
+      <div className="bg-slate-800/50 backdrop-blur-sm border rounded-lg p-4">
+        <h3 className="text-lg font-semibold text-white mb-3">Score Statistics</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div className="text-center p-2 bg-gray-50 rounded">
-            <p className="font-semibold text-gray-900">{report.summary_statistics.score_statistics.mean_score.toFixed(3)}</p>
-            <p className="text-gray-600">Mean</p>
+          <div className="text-center p-2 bg-slate-900/50 rounded">
+            <p className="font-semibold text-white">{report.summary_statistics.score_statistics.mean_score.toFixed(3)}</p>
+            <p className="text-gray-400">Mean</p>
           </div>
-          <div className="text-center p-2 bg-gray-50 rounded">
-            <p className="font-semibold text-gray-900">{report.summary_statistics.score_statistics.median_score.toFixed(3)}</p>
-            <p className="text-gray-600">Median</p>
+          <div className="text-center p-2 bg-slate-900/50 rounded">
+            <p className="font-semibold text-white">{report.summary_statistics.score_statistics.median_score.toFixed(3)}</p>
+            <p className="text-gray-400">Median</p>
           </div>
-          <div className="text-center p-2 bg-gray-50 rounded">
-            <p className="font-semibold text-gray-900">{report.summary_statistics.score_statistics.percentile_95.toFixed(3)}</p>
-            <p className="text-gray-600">95th %ile</p>
+          <div className="text-center p-2 bg-slate-900/50 rounded">
+            <p className="font-semibold text-white">{report.summary_statistics.score_statistics.percentile_95.toFixed(3)}</p>
+            <p className="text-gray-400">95th %ile</p>
           </div>
-          <div className="text-center p-2 bg-gray-50 rounded">
-            <p className="font-semibold text-gray-900">{report.summary_statistics.score_statistics.max_score.toFixed(3)}</p>
-            <p className="text-gray-600">Maximum</p>
+          <div className="text-center p-2 bg-slate-900/50 rounded">
+            <p className="font-semibold text-white">{report.summary_statistics.score_statistics.max_score.toFixed(3)}</p>
+            <p className="text-gray-400">Maximum</p>
           </div>
         </div>
       </div>
@@ -276,13 +276,13 @@ const ReportViewer = ({ report, onClose }) => {
   );
 
   return (
-    <div className="bg-white rounded-lg shadow-lg">
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-lg">
       {/* Header */}
-      <div className="border-b border-gray-200 p-6">
+      <div className="border-b border-slate-700/50 p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Anomaly Detection Report</h2>
-            <p className="text-gray-600 mt-1">
+            <h2 className="text-2xl font-bold text-white">Anomaly Detection Report</h2>
+            <p className="text-gray-400 mt-1">
               Report ID: {report.report_id} • Generated: {new Date(report.timestamp).toLocaleString()}
             </p>
           </div>
@@ -304,7 +304,7 @@ const ReportViewer = ({ report, onClose }) => {
             {onClose && (
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                className="px-4 py-2 bg-gray-200 text-gray-300 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Close
               </button>
@@ -314,7 +314,7 @@ const ReportViewer = ({ report, onClose }) => {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-slate-700/50">
         <nav className="flex space-x-8 px-6">
           {[
             { id: 'summary', label: 'Summary', icon: BarChart3 },
@@ -327,7 +327,7 @@ const ReportViewer = ({ report, onClose }) => {
               className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-slate-600/50'
               }`}
             >
               <tab.icon className="w-4 h-4 mr-2" />

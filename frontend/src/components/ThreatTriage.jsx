@@ -148,28 +148,28 @@ const ThreatTriage = () => {
   const getPriorityColor = (priority) => {
     switch (priority) {
       case 'high':
-        return 'text-red-700 bg-red-100 border-red-200';
+        return 'text-red-300 bg-red-900/30 border-red-500/30';
       case 'medium':
-        return 'text-orange-700 bg-orange-100 border-orange-200';
+        return 'text-orange-300 bg-orange-900/30 border-orange-500/30';
       case 'low':
-        return 'text-yellow-700 bg-yellow-100 border-yellow-200';
+        return 'text-yellow-300 bg-yellow-900/30 border-yellow-500/30';
       default:
-        return 'text-gray-700 bg-gray-100 border-gray-200';
+        return 'text-gray-300 bg-slate-700/50 border-slate-700/50';
     }
   };
 
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'critical':
-        return 'text-red-600 bg-red-100';
+        return 'text-red-300 bg-red-600/20 border border-red-500/30';
       case 'high':
-        return 'text-orange-600 bg-orange-100';
+        return 'text-orange-300 bg-orange-600/20 border border-orange-500/30';
       case 'medium':
-        return 'text-yellow-600 bg-yellow-100';
+        return 'text-yellow-300 bg-yellow-600/20 border border-yellow-500/30';
       case 'low':
-        return 'text-green-600 bg-green-100';
+        return 'text-green-300 bg-green-600/20 border border-green-500/30';
       default:
-        return 'text-gray-600 bg-gray-100';
+        return 'text-gray-400 bg-slate-700/50';
     }
   };
 
@@ -204,10 +204,10 @@ const ThreatTriage = () => {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow p-6">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          <span className="ml-2 text-gray-600">Loading threat triage...</span>
+          <span className="ml-2 text-gray-400">Loading threat triage...</span>
         </div>
       </div>
     );
@@ -215,7 +215,7 @@ const ThreatTriage = () => {
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow p-6">
         <div className="flex items-center justify-center h-64">
           <AlertTriangle className="h-8 w-8 text-red-500 mr-2" />
           <span className="text-red-600">Error: {error}</span>
@@ -226,15 +226,15 @@ const ThreatTriage = () => {
 
   if (!triageData || triageData.summary.total_active_alerts === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Threat Triage</h3>
+          <h3 className="text-lg font-semibold text-white">Threat Triage</h3>
           <Shield className="h-5 w-5 text-gray-400" />
         </div>
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <CheckCircle className="h-12 w-12 text-green-300 mx-auto mb-2" />
-            <p className="text-gray-500">No active threats to triage</p>
+            <p className="text-gray-400">No active threats to triage</p>
             <p className="text-sm text-gray-400">All alerts have been processed</p>
           </div>
         </div>
@@ -261,13 +261,13 @@ const ThreatTriage = () => {
           return (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Escalate To
                 </label>
                 <select
                   value={formData.escalated_to || 'Senior Analyst'}
                   onChange={(e) => setFormData({...formData, escalated_to: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                 >
                   <option value="Senior Analyst">Senior Analyst</option>
                   <option value="SOC Manager">SOC Manager</option>
@@ -275,13 +275,13 @@ const ThreatTriage = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Escalation Reason
                 </label>
                 <textarea
                   value={formData.reason || ''}
                   onChange={(e) => setFormData({...formData, reason: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                   rows={3}
                   placeholder="Explain why this alert needs escalation..."
                 />
@@ -293,7 +293,7 @@ const ThreatTriage = () => {
                   onChange={(e) => setFormData({...formData, priority_increase: e.target.checked})}
                   className="mr-2"
                 />
-                <label className="text-sm text-gray-700">Increase priority level</label>
+                <label className="text-sm text-gray-300">Increase priority level</label>
               </div>
             </div>
           );
@@ -302,13 +302,13 @@ const ThreatTriage = () => {
           return (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Assign To
                 </label>
                 <select
                   value={formData.assigned_to || ''}
                   onChange={(e) => setFormData({...formData, assigned_to: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                   required
                 >
                   <option value="">Select an analyst...</option>
@@ -320,13 +320,13 @@ const ThreatTriage = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Assignment Notes
                 </label>
                 <textarea
                   value={formData.notes || ''}
                   onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                   rows={3}
                   placeholder="Add any specific instructions or context..."
                 />
@@ -338,13 +338,13 @@ const ThreatTriage = () => {
           return (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Investigation Priority
                 </label>
                 <select
                   value={formData.priority || 'medium'}
                   onChange={(e) => setFormData({...formData, priority: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -353,13 +353,13 @@ const ThreatTriage = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Initial Investigation Notes
                 </label>
                 <textarea
                   value={formData.notes || ''}
                   onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                   rows={4}
                   placeholder="Document initial findings, investigation plan, or relevant context..."
                 />
@@ -371,13 +371,13 @@ const ThreatTriage = () => {
           return (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Resolution Type
                 </label>
                 <select
                   value={formData.resolution_type || 'resolved'}
                   onChange={(e) => setFormData({...formData, resolution_type: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                 >
                   <option value="resolved">Resolved</option>
                   <option value="false_positive">False Positive</option>
@@ -386,26 +386,26 @@ const ThreatTriage = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Resolution Notes *
                 </label>
                 <textarea
                   value={formData.notes || ''}
                   onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                   rows={3}
                   placeholder="Explain how the alert was resolved..."
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Action Taken
                 </label>
                 <textarea
                   value={formData.action_taken || ''}
                   onChange={(e) => setFormData({...formData, action_taken: e.target.value})}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                   rows={2}
                   placeholder="Describe any remediation actions taken..."
                 />
@@ -419,22 +419,22 @@ const ThreatTriage = () => {
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="bg-slate-800 border border-slate-700/50 rounded-lg shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 capitalize">
+            <h3 className="text-lg font-semibold text-white capitalize">
               {triageAction} Alert #{currentAlert.id}
             </h3>
             <button
               onClick={() => setShowTriageModal(false)}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-400"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <div className="text-sm text-gray-600">
+          <div className="mb-4 p-3 bg-slate-900/50 rounded-lg">
+            <div className="text-sm text-gray-400">
               <div><strong>Attack Type:</strong> {currentAlert.attack_type}</div>
               <div><strong>Source:</strong> {currentAlert.source_ip}</div>
               <div><strong>Severity:</strong> {currentAlert.severity}</div>
@@ -448,13 +448,13 @@ const ThreatTriage = () => {
               <button
                 type="button"
                 onClick={() => setShowTriageModal(false)}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 text-gray-300 bg-slate-700/50 border border-slate-600/50 rounded-lg hover:bg-slate-600/50 transition-all duration-200"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition-all duration-200 shadow-lg shadow-blue-500/30"
               >
                 {triageAction === 'resolve' ? 'Resolve' : 
                  triageAction === 'escalate' ? 'Escalate' :
@@ -468,26 +468,26 @@ const ThreatTriage = () => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Threat Triage</h3>
-          <p className="text-sm text-gray-500">
+          <h3 className="text-lg font-semibold text-white">Threat Triage</h3>
+          <p className="text-sm text-gray-400">
             {triageData.summary.total_active_alerts} active alerts requiring attention
           </p>
         </div>
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600">Avg Priority Score:</span>
-            <span className="font-semibold text-indigo-600">
+            <span className="text-sm text-gray-400">Avg Priority Score:</span>
+            <span className="font-semibold text-blue-400">
               {triageData.summary.average_priority_score}/100
             </span>
           </div>
           {selectedAlerts.length > 0 && (
             <button
               onClick={() => setShowBulkActions(!showBulkActions)}
-              className="flex items-center space-x-2 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200"
+              className="flex items-center space-x-2 px-3 py-1 bg-blue-600/20 text-blue-300 rounded-lg hover:bg-blue-600/30 transition-all duration-200 border border-blue-500/30"
             >
               <Users className="h-4 w-4" />
               <span>Bulk Actions ({selectedAlerts.length})</span>
@@ -499,22 +499,22 @@ const ThreatTriage = () => {
 
       {/* Bulk Actions Panel */}
       {showBulkActions && selectedAlerts.length > 0 && (
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+        <div className="mb-6 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="font-medium text-gray-900">Bulk Actions</h4>
-            <span className="text-sm text-gray-600">{selectedAlerts.length} alerts selected</span>
+            <h4 className="font-medium text-white">Bulk Actions</h4>
+            <span className="text-sm text-gray-400">{selectedAlerts.length} alerts selected</span>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => handleBulkAction('flag')}
-              className="flex items-center space-x-1 px-3 py-1 bg-orange-100 text-orange-700 rounded-md hover:bg-orange-200"
+              className="flex items-center space-x-1 px-3 py-1 bg-orange-600/20 text-orange-300 rounded-lg hover:bg-orange-600/30 transition-all duration-200 border border-orange-500/30"
             >
               <Flag className="h-4 w-4" />
               <span>Flag All</span>
             </button>
             <button
               onClick={() => handleBulkAction('dismiss')}
-              className="flex items-center space-x-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+              className="flex items-center space-x-1 px-3 py-1 bg-slate-700/50 text-gray-300 rounded-lg hover:bg-slate-600/50 transition-all duration-200 border border-slate-600/50"
             >
               <X className="h-4 w-4" />
               <span>Dismiss All</span>
@@ -524,7 +524,7 @@ const ThreatTriage = () => {
                 const assignedTo = prompt('Assign to (username):');
                 if (assignedTo) handleBulkAction('assign', { assigned_to: assignedTo });
               }}
-              className="flex items-center space-x-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+              className="flex items-center space-x-1 px-3 py-1 bg-blue-600/20 text-blue-300 rounded-lg hover:bg-blue-600/30 transition-all duration-200 border border-blue-500/30"
             >
               <UserPlus className="h-4 w-4" />
               <span>Assign All</span>
@@ -537,10 +537,10 @@ const ThreatTriage = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <button
           onClick={() => setSelectedPriority('high')}
-          className={`p-4 rounded-lg border-2 text-left transition-colors ${
+          className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
             selectedPriority === 'high' 
-              ? 'border-red-300 bg-red-50' 
-              : 'border-gray-200 hover:border-red-200'
+              ? 'border-red-500/50 bg-red-900/20 shadow-lg shadow-red-500/20' 
+              : 'border-slate-700/50 bg-slate-900/30 hover:border-red-500/30'
           }`}
         >
           <div className="flex items-center justify-between">
@@ -548,7 +548,7 @@ const ThreatTriage = () => {
               <div className="text-2xl font-bold text-red-600">
                 {triageData.summary.high_priority_count}
               </div>
-              <div className="text-sm text-gray-600">High Priority</div>
+              <div className="text-sm text-gray-400">High Priority</div>
             </div>
             <AlertTriangle className="h-8 w-8 text-red-500" />
           </div>
@@ -556,10 +556,10 @@ const ThreatTriage = () => {
 
         <button
           onClick={() => setSelectedPriority('medium')}
-          className={`p-4 rounded-lg border-2 text-left transition-colors ${
+          className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
             selectedPriority === 'medium' 
-              ? 'border-orange-300 bg-orange-50' 
-              : 'border-gray-200 hover:border-orange-200'
+              ? 'border-orange-500/50 bg-orange-900/20 shadow-lg shadow-orange-500/20' 
+              : 'border-slate-700/50 bg-slate-900/30 hover:border-orange-500/30'
           }`}
         >
           <div className="flex items-center justify-between">
@@ -567,7 +567,7 @@ const ThreatTriage = () => {
               <div className="text-2xl font-bold text-orange-600">
                 {triageData.summary.medium_priority_count}
               </div>
-              <div className="text-sm text-gray-600">Medium Priority</div>
+              <div className="text-sm text-gray-400">Medium Priority</div>
             </div>
             <Target className="h-8 w-8 text-orange-500" />
           </div>
@@ -575,10 +575,10 @@ const ThreatTriage = () => {
 
         <button
           onClick={() => setSelectedPriority('low')}
-          className={`p-4 rounded-lg border-2 text-left transition-colors ${
+          className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
             selectedPriority === 'low' 
-              ? 'border-yellow-300 bg-yellow-50' 
-              : 'border-gray-200 hover:border-yellow-200'
+              ? 'border-yellow-500/50 bg-yellow-900/20 shadow-lg shadow-yellow-500/20' 
+              : 'border-slate-700/50 bg-slate-900/30 hover:border-yellow-500/30'
           }`}
         >
           <div className="flex items-center justify-between">
@@ -586,7 +586,7 @@ const ThreatTriage = () => {
               <div className="text-2xl font-bold text-yellow-600">
                 {triageData.summary.low_priority_count}
               </div>
-              <div className="text-sm text-gray-600">Low Priority</div>
+              <div className="text-sm text-gray-400">Low Priority</div>
             </div>
             <Eye className="h-8 w-8 text-yellow-500" />
           </div>
@@ -596,12 +596,12 @@ const ThreatTriage = () => {
       {/* Recommendations */}
       {triageData.summary.recommendations && triageData.summary.recommendations.length > 0 && (
         <div className="mb-6">
-          <h4 className="text-md font-semibold text-gray-900 mb-3">Recommendations</h4>
+          <h4 className="text-md font-semibold text-white mb-3">Recommendations</h4>
           <div className="space-y-2">
             {triageData.summary.recommendations.map((rec, index) => (
-              <div key={index} className="flex items-center p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div key={index} className="flex items-center p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
                 {getRecommendationIcon(rec.type)}
-                <span className="ml-3 text-sm text-gray-700">{rec.message}</span>
+                <span className="ml-3 text-sm text-gray-300">{rec.message}</span>
               </div>
             ))}
           </div>
@@ -611,11 +611,11 @@ const ThreatTriage = () => {
       {/* Alert List */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h4 className="text-md font-semibold text-gray-900 capitalize">
+          <h4 className="text-md font-semibold text-white capitalize">
             {selectedPriority} Priority Alerts
           </h4>
           {triageData.summary.most_common_attack && (
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-400">
               Most Common: <span className="font-medium">{triageData.summary.most_common_attack}</span>
             </div>
           )}
@@ -624,19 +624,19 @@ const ThreatTriage = () => {
         {currentAlerts.length === 0 ? (
           <div className="text-center py-8">
             <CheckCircle className="h-12 w-12 text-green-300 mx-auto mb-2" />
-            <p className="text-gray-500">No {selectedPriority} priority alerts</p>
+            <p className="text-gray-400">No {selectedPriority} priority alerts</p>
           </div>
         ) : (
           <div className="space-y-3">
             {/* Select All Checkbox */}
-            <div className="flex items-center space-x-3 pb-2 border-b border-gray-200">
+            <div className="flex items-center space-x-3 pb-2 border-b border-slate-700/50">
               <input
                 type="checkbox"
                 checked={selectedAlerts.length === currentAlerts.length && currentAlerts.length > 0}
                 onChange={selectAllAlerts}
                 className="rounded"
               />
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-gray-400">
                 Select All ({currentAlerts.length} alerts)
               </span>
             </div>
@@ -663,12 +663,12 @@ const ThreatTriage = () => {
                         <span className={`px-2 py-1 rounded text-xs font-medium ${getSeverityColor(alert.severity)}`}>
                           {alert.severity.toUpperCase()}
                         </span>
-                        <span className="font-medium text-gray-900">{alert.attack_type}</span>
-                        <span className="text-sm text-gray-500">
+                        <span className="font-medium text-white">{alert.attack_type}</span>
+                        <span className="text-sm text-gray-400">
                           Score: {alert.priority_score}/100
                         </span>
                         {alert.status && alert.status !== 'new' && (
-                          <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30">
                             {alert.status.toUpperCase()}
                           </span>
                         )}
@@ -676,43 +676,43 @@ const ThreatTriage = () => {
                       
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
-                          <span className="text-gray-600">Source:</span>
-                          <div className="font-mono">{alert.source_ip}</div>
+                          <span className="text-gray-400">Source:</span>
+                          <div className="font-mono text-gray-300">{alert.source_ip}</div>
                         </div>
                         <div>
-                          <span className="text-gray-600">Destination:</span>
-                          <div className="font-mono">{alert.destination_ip}</div>
+                          <span className="text-gray-400">Destination:</span>
+                          <div className="font-mono text-gray-300">{alert.destination_ip}</div>
                         </div>
                         <div>
-                          <span className="text-gray-600">Anomaly Score:</span>
-                          <div className="font-semibold">{alert.anomaly_score}</div>
+                          <span className="text-gray-400">Anomaly Score:</span>
+                          <div className="font-semibold text-white">{alert.anomaly_score}</div>
                         </div>
                         <div>
-                          <span className="text-gray-600">Time:</span>
-                          <div>{formatTimestamp(alert.timestamp)}</div>
+                          <span className="text-gray-400">Time:</span>
+                          <div className="text-gray-300">{formatTimestamp(alert.timestamp)}</div>
                         </div>
                       </div>
 
-                      <div className="mt-2 flex items-center space-x-4 text-sm text-gray-600">
+                      <div className="mt-2 flex items-center space-x-4 text-sm text-gray-400">
                         <span>Protocol: {alert.protocol}</span>
                         <span>Port: {alert.dst_port}</span>
                         <span>Confidence: {alert.confidence}</span>
                         {alert.assigned_to && (
-                          <span className="text-blue-600">Assigned to: {alert.assigned_to}</span>
+                          <span className="text-blue-400">Assigned to: {alert.assigned_to}</span>
                         )}
                       </div>
 
                       {/* Investigation Status */}
                       {alert.investigation_started && (
-                        <div className="mt-2 p-2 bg-blue-50 rounded text-sm">
+                        <div className="mt-2 p-2 bg-blue-900/20 border border-blue-500/30 rounded text-sm">
                           <div className="flex items-center space-x-2">
                             <Search className="h-4 w-4 text-blue-600" />
-                            <span className="text-blue-800 font-medium">
+                            <span className="text-blue-300 font-medium">
                               Investigation in progress by {alert.investigator}
                             </span>
                           </div>
                           {alert.investigation_notes && (
-                            <div className="mt-1 text-blue-700 text-xs">
+                            <div className="mt-1 text-blue-400 text-xs">
                               Latest: {alert.investigation_notes.split('\n').pop()}
                             </div>
                           )}
@@ -725,42 +725,42 @@ const ThreatTriage = () => {
                   <div className="flex items-center space-x-1 ml-4">
                     <button
                       onClick={() => openTriageModal(alert, 'escalate')}
-                      className="p-2 text-red-600 hover:bg-red-100 rounded"
+                      className="p-2 text-red-400 hover:bg-red-600/20 rounded transition-colors border border-transparent hover:border-red-500/30"
                       title="Escalate alert"
                     >
                       <ArrowUp className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => openTriageModal(alert, 'assign')}
-                      className="p-2 text-blue-600 hover:bg-blue-100 rounded"
+                      className="p-2 text-blue-400 hover:bg-blue-600/20 rounded transition-colors border border-transparent hover:border-blue-500/30"
                       title="Assign alert"
                     >
                       <UserPlus className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => openTriageModal(alert, 'investigate')}
-                      className="p-2 text-purple-600 hover:bg-purple-100 rounded"
+                      className="p-2 text-purple-400 hover:bg-purple-600/20 rounded transition-colors border border-transparent hover:border-purple-500/30"
                       title="Start investigation"
                     >
                       <Search className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => openTriageModal(alert, 'resolve')}
-                      className="p-2 text-green-600 hover:bg-green-100 rounded"
+                      className="p-2 text-green-400 hover:bg-green-600/20 rounded transition-colors border border-transparent hover:border-green-500/30"
                       title="Resolve alert"
                     >
                       <CheckCircle className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleAlertAction(alert.id, 'flag')}
-                      className="p-2 text-orange-600 hover:bg-orange-100 rounded"
+                      className="p-2 text-orange-400 hover:bg-orange-600/20 rounded transition-colors border border-transparent hover:border-orange-500/30"
                       title="Flag alert"
                     >
                       <Flag className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleAlertAction(alert.id, 'dismiss')}
-                      className="p-2 text-gray-600 hover:bg-gray-100 rounded"
+                      className="p-2 text-gray-400 hover:bg-slate-700/50 rounded"
                       title="Dismiss alert"
                     >
                       <X className="h-4 w-4" />
@@ -770,11 +770,11 @@ const ThreatTriage = () => {
 
                 {/* Priority Score Bar */}
                 <div className="mt-3">
-                  <div className="flex justify-between text-xs text-gray-600 mb-1">
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
                     <span>Priority Score</span>
                     <span>{alert.priority_score}/100</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-slate-700/50 rounded-full h-2">
                     <div 
                       className={`h-2 rounded-full ${
                         alert.priority_level === 'high' ? 'bg-red-500' :

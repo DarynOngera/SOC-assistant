@@ -49,14 +49,14 @@ const CSVAnalysis = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-slate-900/50 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Navigation Header */}
         <div className="mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">CSV Anomaly Analysis</h1>
-              <p className="text-gray-600 mt-1">
+              <h1 className="text-3xl font-bold text-white">CSV Anomaly Analysis</h1>
+              <p className="text-gray-400 mt-1">
                 Upload CSV files to detect anomalies and generate comprehensive reports
               </p>
             </div>
@@ -67,8 +67,8 @@ const CSVAnalysis = () => {
                 onClick={() => setActiveView('upload')}
                 className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   activeView === 'upload'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-slate-800/50 backdrop-blur-sm text-blue-600 shadow-sm'
+                    : 'text-gray-400 hover:text-white'
                 }`}
               >
                 <Upload className="w-4 h-4 mr-2" />
@@ -78,8 +78,8 @@ const CSVAnalysis = () => {
                 onClick={() => setActiveView('reports')}
                 className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   activeView === 'reports'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-slate-800/50 backdrop-blur-sm text-blue-600 shadow-sm'
+                    : 'text-gray-400 hover:text-white'
                 }`}
               >
                 <List className="w-4 h-4 mr-2" />
@@ -90,10 +90,10 @@ const CSVAnalysis = () => {
 
           {/* Breadcrumb for report detail view */}
           {activeView === 'report-detail' && (
-            <div className="mt-4 flex items-center text-sm text-gray-500">
+            <div className="mt-4 flex items-center text-sm text-gray-400">
               <button
                 onClick={handleBackToReports}
-                className="flex items-center hover:text-gray-700"
+                className="flex items-center hover:text-gray-300"
               >
                 <ArrowLeft className="w-4 h-4 mr-1" />
                 Back to Reports

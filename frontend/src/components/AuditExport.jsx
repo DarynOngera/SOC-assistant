@@ -138,7 +138,7 @@ const AuditExport = () => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-md p-6">
       <div className="flex items-center gap-2 mb-6">
         <Download className="w-5 h-5 text-blue-600" />
         <h2 className="text-xl font-semibold text-gray-800">Export Audit Data</h2>
@@ -147,7 +147,7 @@ const AuditExport = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Export Format Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
             Export Format
           </label>
           <div className="grid grid-cols-2 gap-2">
@@ -158,13 +158,13 @@ const AuditExport = () => {
                 className={`p-3 border rounded-lg flex items-center gap-2 transition-colors ${
                   exportConfig.format === format.value
                     ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-300 hover:border-gray-400'
+                    : 'border-slate-600/50 hover:border-gray-400'
                 }`}
               >
                 {getFormatIcon(format.value)}
                 <div className="text-left">
                   <div className="font-medium">{format.label}</div>
-                  <div className="text-xs text-gray-500">{format.description}</div>
+                  <div className="text-xs text-gray-400">{format.description}</div>
                 </div>
               </button>
             ))}
@@ -173,7 +173,7 @@ const AuditExport = () => {
 
         {/* Date Range */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
             <Calendar className="w-4 h-4 inline mr-1" />
             Date Range
           </label>
@@ -183,33 +183,33 @@ const AuditExport = () => {
                 type="date"
                 value={exportConfig.startDate}
                 onChange={(e) => handleInputChange('startDate', e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-3 py-2 border border-slate-600/50 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Start Date"
               />
               <input
                 type="date"
                 value={exportConfig.endDate}
                 onChange={(e) => handleInputChange('endDate', e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-3 py-2 border border-slate-600/50 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="End Date"
               />
             </div>
             <div className="flex gap-1">
               <button
                 onClick={() => setQuickDateRange(7)}
-                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+                className="px-2 py-1 text-xs bg-slate-700/50 hover:bg-gray-200 rounded"
               >
                 Last 7 days
               </button>
               <button
                 onClick={() => setQuickDateRange(30)}
-                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+                className="px-2 py-1 text-xs bg-slate-700/50 hover:bg-gray-200 rounded"
               >
                 Last 30 days
               </button>
               <button
                 onClick={() => setQuickDateRange(90)}
-                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+                className="px-2 py-1 text-xs bg-slate-700/50 hover:bg-gray-200 rounded"
               >
                 Last 90 days
               </button>
@@ -219,7 +219,7 @@ const AuditExport = () => {
 
         {/* Filters */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
             <Filter className="w-4 h-4 inline mr-1" />
             Filters
           </label>
@@ -227,7 +227,7 @@ const AuditExport = () => {
             <select
               value={exportConfig.eventType}
               onChange={(e) => handleInputChange('eventType', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Event Types</option>
               {eventTypes.map((type) => (
@@ -240,7 +240,7 @@ const AuditExport = () => {
             <select
               value={exportConfig.severity}
               onChange={(e) => handleInputChange('severity', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Severity Levels</option>
               {severityLevels.map((level) => (
@@ -255,14 +255,14 @@ const AuditExport = () => {
               value={exportConfig.username}
               onChange={(e) => handleInputChange('username', e.target.value)}
               placeholder="Filter by username (optional)"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
 
         {/* Options */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
             Export Options
           </label>
           <div className="space-y-2">
@@ -271,9 +271,9 @@ const AuditExport = () => {
                 type="checkbox"
                 checked={exportConfig.includeSummary}
                 onChange={(e) => handleInputChange('includeSummary', e.target.checked)}
-                className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-600/50 rounded"
               />
-              <span className="text-sm text-gray-700">Include summary statistics</span>
+              <span className="text-sm text-gray-300">Include summary statistics</span>
             </label>
           </div>
         </div>
@@ -305,9 +305,9 @@ const AuditExport = () => {
       </div>
 
       {/* Format Information */}
-      <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Export Format Information</h3>
-        <div className="text-xs text-gray-600 space-y-1">
+      <div className="mt-4 p-4 bg-slate-900/50 rounded-lg">
+        <h3 className="text-sm font-medium text-gray-300 mb-2">Export Format Information</h3>
+        <div className="text-xs text-gray-400 space-y-1">
           {exportFormats.find(f => f.value === exportConfig.format) && (
             <p>
               <strong>{exportFormats.find(f => f.value === exportConfig.format).label}:</strong>{' '}
