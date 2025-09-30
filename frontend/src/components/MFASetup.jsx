@@ -109,13 +109,13 @@ const MFASetup = ({ user, onMFAChange }) => {
 
   if (user.mfa_enabled && step === 1) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow-sm border">
+      <div className="bg-slate-800/50 backdrop-blur-sm p-6 rounded-lg shadow-sm border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
             <Shield className="h-6 w-6 text-green-500 mr-3" />
             <div>
-              <h3 className="text-lg font-medium text-gray-900">Multi-Factor Authentication</h3>
-              <p className="text-sm text-gray-600">MFA is currently enabled for your account</p>
+              <h3 className="text-lg font-medium text-white">Multi-Factor Authentication</h3>
+              <p className="text-sm text-gray-400">MFA is currently enabled for your account</p>
             </div>
           </div>
           <div className="flex items-center">
@@ -158,12 +158,12 @@ const MFASetup = ({ user, onMFAChange }) => {
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border">
+    <div className="bg-slate-800/50 backdrop-blur-sm p-6 rounded-lg shadow-sm border">
       <div className="flex items-center mb-6">
         <Smartphone className="h-6 w-6 text-indigo-600 mr-3" />
         <div>
-          <h3 className="text-lg font-medium text-gray-900">Multi-Factor Authentication Setup</h3>
-          <p className="text-sm text-gray-600">Secure your account with Google Authenticator</p>
+          <h3 className="text-lg font-medium text-white">Multi-Factor Authentication Setup</h3>
+          <p className="text-sm text-gray-400">Secure your account with Google Authenticator</p>
         </div>
       </div>
 
@@ -184,8 +184,8 @@ const MFASetup = ({ user, onMFAChange }) => {
           </div>
 
           <div className="space-y-3">
-            <h4 className="font-medium text-gray-900">Before you start:</h4>
-            <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+            <h4 className="font-medium text-white">Before you start:</h4>
+            <ul className="list-disc list-inside text-sm text-gray-400 space-y-1">
               <li>Install Google Authenticator on your mobile device</li>
               <li>Make sure your device's time is synchronized</li>
               <li>Have your device ready to scan a QR code</li>
@@ -217,9 +217,9 @@ const MFASetup = ({ user, onMFAChange }) => {
       {step === 2 && (
         <div className="space-y-6">
           <div className="text-center">
-            <h4 className="font-medium text-gray-900 mb-4">Scan QR Code</h4>
+            <h4 className="font-medium text-white mb-4">Scan QR Code</h4>
             {qrCode && (
-              <div className="inline-block p-4 bg-white border-2 border-gray-200 rounded-lg">
+              <div className="inline-block p-4 bg-slate-800/50 backdrop-blur-sm border-2 border-slate-700/50 rounded-lg">
                 <img 
                   src={`data:image/png;base64,${qrCode}`} 
                   alt="MFA QR Code"
@@ -229,24 +229,24 @@ const MFASetup = ({ user, onMFAChange }) => {
             )}
           </div>
 
-          <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
-            <h5 className="font-medium text-gray-900 mb-2">Manual Entry</h5>
-            <p className="text-sm text-gray-600 mb-3">
+          <div className="bg-slate-900/50 border border-slate-700/50 rounded-md p-4">
+            <h5 className="font-medium text-white mb-2">Manual Entry</h5>
+            <p className="text-sm text-gray-400 mb-3">
               If you can't scan the QR code, enter this secret manually:
             </p>
             <div className="flex items-center space-x-2">
-              <code className="flex-1 bg-white px-3 py-2 border border-gray-300 rounded text-sm font-mono">
+              <code className="flex-1 bg-slate-800/50 backdrop-blur-sm px-3 py-2 border border-slate-600/50 rounded text-sm font-mono">
                 {showSecret ? secret : '••••••••••••••••••••••••••••••••'}
               </code>
               <button
                 onClick={() => setShowSecret(!showSecret)}
-                className="p-2 text-gray-500 hover:text-gray-700"
+                className="p-2 text-gray-400 hover:text-gray-300"
               >
                 {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
               <button
                 onClick={copySecret}
-                className="p-2 text-gray-500 hover:text-gray-700"
+                className="p-2 text-gray-400 hover:text-gray-300"
               >
                 <Copy className="h-4 w-4" />
               </button>
@@ -254,7 +254,7 @@ const MFASetup = ({ user, onMFAChange }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Enter verification code from your authenticator app:
             </label>
             <input
@@ -263,7 +263,7 @@ const MFASetup = ({ user, onMFAChange }) => {
               value={verificationCode}
               onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
               placeholder="123456"
-              className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="block w-full px-3 py-2 border border-slate-600/50 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
 
@@ -281,7 +281,7 @@ const MFASetup = ({ user, onMFAChange }) => {
           <div className="flex space-x-3">
             <button
               onClick={() => setStep(1)}
-              className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200"
+              className="flex-1 bg-slate-700/50 text-gray-300 px-4 py-2 rounded-md hover:bg-gray-200"
             >
               Back
             </button>
@@ -303,8 +303,8 @@ const MFASetup = ({ user, onMFAChange }) => {
             <CheckCircle className="h-6 w-6 text-green-600" />
           </div>
           <div>
-            <h4 className="text-lg font-medium text-gray-900">MFA Successfully Enabled!</h4>
-            <p className="text-sm text-gray-600 mt-2">
+            <h4 className="text-lg font-medium text-white">MFA Successfully Enabled!</h4>
+            <p className="text-sm text-gray-400 mt-2">
               Your account is now protected with two-factor authentication. You'll need to enter 
               a code from your authenticator app each time you log in.
             </p>

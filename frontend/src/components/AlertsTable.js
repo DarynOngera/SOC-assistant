@@ -89,8 +89,8 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Alert Prioritization</h3>
-        <div className="text-sm text-gray-500">
+        <h3 className="text-lg font-semibold text-white">Alert Prioritization</h3>
+        <div className="text-sm text-gray-400">
           {filteredAndSortedAlerts.length} of {alerts.length} alerts
         </div>
       </div>
@@ -98,20 +98,20 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
       {/* Filters and Search */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
           <input
             type="text"
             placeholder="Search by IP address or attack type..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
           />
         </div>
         
         <select
           value={filterSeverity}
           onChange={(e) => setFilterSeverity(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          className="px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
         >
           <option value="">All Severities</option>
           <option value="critical">Critical</option>
@@ -123,7 +123,7 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          className="px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
         >
           <option value="">All Statuses</option>
           <option value="new">New</option>
@@ -134,11 +134,11 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-slate-700/50">
+          <thead className="bg-slate-900/50">
             <tr>
               <th
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-slate-700/30 transition-colors"
                 onClick={() => handleSort('timestamp')}
               >
                 <div className="flex items-center space-x-1">
@@ -147,7 +147,7 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
                 </div>
               </th>
               <th
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-slate-700/30 transition-colors"
                 onClick={() => handleSort('severity')}
               >
                 <div className="flex items-center space-x-1">
@@ -155,17 +155,17 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
                   <SortIcon field="severity" />
                 </div>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Source IP
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Destination IP
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Attack Type
               </th>
               <th
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-slate-700/30 transition-colors"
                 onClick={() => handleSort('anomaly_score')}
               >
                 <div className="flex items-center space-x-1">
@@ -173,18 +173,18 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
                   <SortIcon field="anomaly_score" />
                 </div>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-slate-800/30 divide-y divide-slate-700/50">
             {paginatedAlerts.map((alert, index) => (
-              <tr key={`alert-${alert.alert_id}-${alert.timestamp}-${index}`} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+              <tr key={`alert-${alert.alert_id}-${alert.timestamp}-${index}`} className="hover:bg-slate-700/30 transition-colors">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                   {formatTimestamp(alert.timestamp)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -192,18 +192,18 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
                     {alert.severity}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-300">
                   {alert.source_ip}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-300">
                   {alert.destination_ip}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                   {alert.attack_type}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
-                    <div className="flex-1 bg-gray-200 rounded-full h-2 mr-2">
+                    <div className="flex-1 bg-slate-700/50 rounded-full h-2 mr-2">
                       <div
                         className={`h-2 rounded-full ${
                           alert.anomaly_score >= 0.8 ? 'bg-danger-500' :
@@ -213,7 +213,7 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
                         style={{ width: `${alert.anomaly_score * 100}%` }}
                       ></div>
                     </div>
-                    <span className="text-sm text-gray-600 min-w-[3rem]">
+                    <span className="text-sm text-gray-400 min-w-[3rem]">
                       {alert.anomaly_score}
                     </span>
                   </div>
@@ -252,24 +252,24 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-gray-300">
             Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredAndSortedAlerts.length)} of {filteredAndSortedAlerts.length} results
           </div>
           <div className="flex space-x-2">
             <button
               onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-sm text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-600/50 transition-all duration-200"
             >
               Previous
             </button>
-            <span className="px-3 py-1 text-sm text-gray-700">
+            <span className="px-3 py-1 text-sm text-gray-300">
               Page {currentPage} of {totalPages}
             </span>
             <button
               onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-sm text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-600/50 transition-all duration-200"
             >
               Next
             </button>

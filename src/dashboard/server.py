@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import tempfile
+import logging
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
@@ -23,15 +24,16 @@ import io
 import time
 import threading
 from datetime import datetime, timedelta
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, request, jsonify, send_file
+from flask_socketio import SocketIO, emit
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit, disconnect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.utils import secure_filename
 import joblib
 import glob
 import uuid
+from bson import ObjectId
 
 # Add project root to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -44,6 +46,23 @@ from src.database.migration_utils import migrate_existing_data
 from src.auth.mongodb_auth_utils import MongoDBAuthManager, token_required, admin_required, analyst_or_admin_required
 from src.utils.csv_processor import CSVProcessor
 from src.utils.audit_exporter import AuditExporter
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Create logger for this module
+logger = logging.getLogger(__name__)
+
+# Reduce noise from external libraries
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('socketio').setLevel(logging.WARNING)
+logging.getLogger('engineio').setLevel(logging.WARNING)
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
+logging.getLogger('PIL').setLevel(logging.WARNING)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'soc-dashboard-secret-key-change-in-production')
@@ -321,14 +340,15 @@ class SOCDashboardAPI:
             self.detector = SupervisedSOCDetector()
             
             model_dir = 'models'
+            logger.info(f"Loading models from: {model_dir}")
             if os.path.exists(model_dir):
-                self.detector.load_models(model_dir)
-                print("✓ Models loaded successfully")
+                logger.debug(f"Available model files: {os.listdir(model_dir)}")
             else:
-                print("⚠ No trained models found. Using mock data mode.")
-                self.detector = None
+                logger.warning("Models directory not found")
+            self.detector.load_models(model_dir)
+            logger.info("Models loaded successfully")
         except Exception as e:
-            print(f"✗ Error loading models: {e}")
+            logger.error(f"Error loading models: {e}")
             self.detector = None
     
     def _initialize_system_stats(self):
@@ -1650,13 +1670,20 @@ def flag_alert(alert_id):
 def dismiss_alert(alert_id):
     """Dismiss an alert in MongoDB"""
     try:
+        print(f"DEBUG: dismiss_alert called with alert_id: {alert_id}")
+        print(f"DEBUG: request.headers: {dict(request.headers)}")
+        print(f"DEBUG: request.current_user: {getattr(request, 'current_user', 'NOT SET')}")
         username = request.current_user['username']
         
-        # Convert alert_id to integer if it's a string
+        # Handle both integer and ObjectId formats
         try:
+            # Try integer first (for backward compatibility)
             alert_id_int = int(alert_id)
+            print(f"DEBUG: Using integer alert_id: {alert_id_int}")
         except ValueError:
-            return jsonify({'error': 'Invalid alert ID format'}), 400
+            # If not integer, use as string (ObjectId)
+            alert_id_int = alert_id
+            print(f"DEBUG: Using ObjectId alert_id: {alert_id_int}")
         
         success, message = dashboard_api.dal.update_alert(
             alert_id=alert_id_int,
@@ -1684,6 +1711,498 @@ def dismiss_alert(alert_id):
     except Exception as e:
         print(f"Error dismissing alert {alert_id}: {e}")
         return jsonify({'error': 'Failed to dismiss alert'}), 500
+
+# Enhanced Triage Actions
+@app.route('/api/alerts/<alert_id>/escalate', methods=['POST'])
+@token_required
+@analyst_or_admin_required
+def escalate_alert(alert_id):
+    """Escalate an alert to higher-level analysts"""
+    try:
+        username = request.current_user['username']
+        data = request.get_json() or {}
+        
+        # Convert alert_id to integer if it's a string
+        try:
+            alert_id_int = int(alert_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid alert ID format'}), 400
+        
+        escalation_reason = data.get('reason', 'No reason provided')
+        escalated_to = data.get('escalated_to', 'Senior Analyst')
+        priority_increase = data.get('priority_increase', True)
+        
+        # Get current alert to determine new severity
+        if isinstance(alert_id_int, str) and len(alert_id_int) == 24:
+            try:
+                current_alert = dashboard_api.dal.db.alerts.find_one({'_id': ObjectId(alert_id_int)})
+            except:
+                current_alert = dashboard_api.dal.db.alerts.find_one({'alert_id': alert_id_int})
+        else:
+            current_alert = dashboard_api.dal.db.alerts.find_one({'alert_id': alert_id_int})
+        if not current_alert:
+            return jsonify({'error': 'Alert not found'}), 404
+        
+        # Increase severity if requested
+        new_severity = current_alert.get('severity', 'medium')
+        if priority_increase:
+            severity_map = {'low': 'medium', 'medium': 'high', 'high': 'critical'}
+            new_severity = severity_map.get(new_severity, new_severity)
+        
+        success, message = dashboard_api.dal.update_alert(
+            alert_id=alert_id_int,
+            updates={
+                'status': 'escalated',
+                'escalated': True,
+                'escalated_by': username,
+                'escalated_to': escalated_to,
+                'escalation_reason': escalation_reason,
+                'escalation_timestamp': datetime.now(),
+                'severity': new_severity
+            },
+            updated_by=username
+        )
+        
+        if success:
+            # Log the action
+            dashboard_api.dal.create_audit_log(
+                event_type='alert_escalated',
+                username=username,
+                ip_address=get_client_info()[0],
+                action="escalate_alert",
+                success=True,
+                details={
+                    'alert_id': alert_id_int, 
+                    'escalated_to': escalated_to,
+                    'reason': escalation_reason,
+                    'new_severity': new_severity
+                }
+            )
+            
+            # Send real-time notification
+            socketio.emit('triage_update', {
+                'type': 'escalation',
+                'alert_id': alert_id_int,
+                'action': 'escalated',
+                'performed_by': username,
+                'escalated_to': escalated_to,
+                'new_severity': new_severity,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            return jsonify({'success': True, 'new_severity': new_severity})
+        else:
+            return jsonify({'error': message}), 404
+            
+    except Exception as e:
+        print(f"Error escalating alert {alert_id}: {e}")
+        return jsonify({'error': 'Failed to escalate alert'}), 500
+
+@app.route('/api/alerts/<alert_id>/assign', methods=['POST'])
+@token_required
+@analyst_or_admin_required
+def assign_alert(alert_id):
+    """Assign an alert to a specific analyst"""
+    try:
+        username = request.current_user['username']
+        data = request.get_json() or {}
+        
+        # Convert alert_id to integer if it's a string
+        try:
+            alert_id_int = int(alert_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid alert ID format'}), 400
+        
+        assigned_to = data.get('assigned_to')
+        assignment_notes = data.get('notes', '')
+        
+        if not assigned_to:
+            return jsonify({'error': 'assigned_to is required'}), 400
+        
+        # Verify the assigned user exists
+        assigned_user = dashboard_api.dal.get_user_by_username(assigned_to)
+        if not assigned_user:
+            return jsonify({'error': 'Assigned user not found'}), 404
+        
+        success, message = dashboard_api.dal.update_alert(
+            alert_id=alert_id_int,
+            updates={
+                'status': 'assigned',
+                'assigned_to': assigned_to,
+                'assigned_by': username,
+                'assignment_timestamp': datetime.now(),
+                'assignment_notes': assignment_notes
+            },
+            updated_by=username
+        )
+        
+        if success:
+            # Log the action
+            dashboard_api.dal.create_audit_log(
+                event_type='alert_assigned',
+                username=username,
+                ip_address=get_client_info()[0],
+                action="assign_alert",
+                success=True,
+                details={
+                    'alert_id': alert_id_int,
+                    'assigned_to': assigned_to,
+                    'notes': assignment_notes
+                }
+            )
+            
+            # Send real-time notification
+            socketio.emit('triage_update', {
+                'type': 'assignment',
+                'alert_id': alert_id_int,
+                'action': 'assigned',
+                'performed_by': username,
+                'assigned_to': assigned_to,
+                'notes': assignment_notes,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': message}), 404
+            
+    except Exception as e:
+        print(f"Error assigning alert {alert_id}: {e}")
+        return jsonify({'error': 'Failed to assign alert'}), 500
+
+@app.route('/api/alerts/<alert_id>/investigate', methods=['POST'])
+@token_required
+@analyst_or_admin_required
+def start_investigation(alert_id):
+    """Start investigation on an alert"""
+    try:
+        username = request.current_user['username']
+        data = request.get_json() or {}
+        
+        # Convert alert_id to integer if it's a string
+        try:
+            alert_id_int = int(alert_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid alert ID format'}), 400
+        
+        investigation_notes = data.get('notes', '')
+        investigation_priority = data.get('priority', 'medium')
+        
+        success, message = dashboard_api.dal.update_alert(
+            alert_id=alert_id_int,
+            updates={
+                'status': 'investigating',
+                'investigation_started': True,
+                'investigator': username,
+                'investigation_start_time': datetime.now(),
+                'investigation_notes': investigation_notes,
+                'investigation_priority': investigation_priority
+            },
+            updated_by=username
+        )
+        
+        if success:
+            # Log the action
+            dashboard_api.dal.create_audit_log(
+                event_type='investigation_started',
+                username=username,
+                ip_address=get_client_info()[0],
+                action="start_investigation",
+                success=True,
+                details={
+                    'alert_id': alert_id_int,
+                    'priority': investigation_priority,
+                    'notes': investigation_notes
+                }
+            )
+            
+            # Send real-time notification
+            socketio.emit('triage_update', {
+                'type': 'investigation',
+                'alert_id': alert_id_int,
+                'action': 'investigation_started',
+                'performed_by': username,
+                'investigator': username,
+                'priority': investigation_priority,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': message}), 404
+            
+    except Exception as e:
+        print(f"Error starting investigation for alert {alert_id}: {e}")
+        return jsonify({'error': 'Failed to start investigation'}), 500
+
+@app.route('/api/alerts/<alert_id>/resolve', methods=['POST'])
+@token_required
+@analyst_or_admin_required
+def resolve_alert(alert_id):
+    """Resolve/close an alert with resolution details"""
+    try:
+        username = request.current_user['username']
+        data = request.get_json() or {}
+        
+        # Convert alert_id to integer if it's a string
+        try:
+            alert_id_int = int(alert_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid alert ID format'}), 400
+        
+        resolution_type = data.get('resolution_type', 'resolved')  # resolved, false_positive, duplicate
+        resolution_notes = data.get('notes', '')
+        resolution_action_taken = data.get('action_taken', '')
+        
+        if not resolution_notes:
+            return jsonify({'error': 'Resolution notes are required'}), 400
+        
+        success, message = dashboard_api.dal.update_alert(
+            alert_id=alert_id_int,
+            updates={
+                'status': 'resolved',
+                'resolved': True,
+                'resolved_by': username,
+                'resolution_timestamp': datetime.now(),
+                'resolution_type': resolution_type,
+                'resolution_notes': resolution_notes,
+                'action_taken': resolution_action_taken
+            },
+            updated_by=username
+        )
+        
+        if success:
+            # Log the action
+            dashboard_api.dal.create_audit_log(
+                event_type='alert_resolved',
+                username=username,
+                ip_address=get_client_info()[0],
+                action="resolve_alert",
+                success=True,
+                details={
+                    'alert_id': alert_id_int,
+                    'resolution_type': resolution_type,
+                    'notes': resolution_notes,
+                    'action_taken': resolution_action_taken
+                }
+            )
+            
+            # Send real-time notification
+            socketio.emit('triage_update', {
+                'type': 'resolution',
+                'alert_id': alert_id_int,
+                'action': 'resolved',
+                'performed_by': username,
+                'resolution_type': resolution_type,
+                'action_taken': resolution_action_taken,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': message}), 404
+            
+    except Exception as e:
+        print(f"Error resolving alert {alert_id}: {e}")
+        return jsonify({'error': 'Failed to resolve alert'}), 500
+
+@app.route('/api/alerts/<alert_id>/update-investigation', methods=['POST'])
+@token_required
+@analyst_or_admin_required
+def update_investigation(alert_id):
+    """Update investigation progress and notes"""
+    try:
+        username = request.current_user['username']
+        data = request.get_json() or {}
+        
+        # Convert alert_id to integer if it's a string
+        try:
+            alert_id_int = int(alert_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid alert ID format'}), 400
+        
+        investigation_update = data.get('update', '')
+        investigation_status = data.get('status', 'in_progress')  # in_progress, completed, blocked
+        
+        if not investigation_update:
+            return jsonify({'error': 'Investigation update is required'}), 400
+        
+        # Get current investigation notes
+        current_alert = dashboard_api.dal.db.alerts.find_one({'alert_id': alert_id_int})
+        if not current_alert:
+            return jsonify({'error': 'Alert not found'}), 404
+        
+        # Append to existing investigation notes
+        existing_notes = current_alert.get('investigation_notes', '')
+        timestamp_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        updated_notes = f"{existing_notes}\n\n[{timestamp_str}] {username}: {investigation_update}".strip()
+        
+        success, message = dashboard_api.dal.update_alert(
+            alert_id=alert_id_int,
+            updates={
+                'investigation_notes': updated_notes,
+                'investigation_status': investigation_status,
+                'last_investigation_update': datetime.now()
+            },
+            updated_by=username
+        )
+        
+        if success:
+            # Log the action
+            dashboard_api.dal.create_audit_log(
+                event_type='investigation_updated',
+                username=username,
+                ip_address=get_client_info()[0],
+                action="update_investigation",
+                success=True,
+                details={
+                    'alert_id': alert_id_int,
+                    'status': investigation_status,
+                    'update': investigation_update
+                }
+            )
+            
+            # Send real-time notification
+            socketio.emit('triage_update', {
+                'type': 'investigation_update',
+                'alert_id': alert_id_int,
+                'action': 'investigation_updated',
+                'performed_by': username,
+                'status': investigation_status,
+                'update': investigation_update,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': message}), 404
+            
+    except Exception as e:
+        print(f"Error updating investigation for alert {alert_id}: {e}")
+        return jsonify({'error': 'Failed to update investigation'}), 500
+
+# Bulk triage operations
+@app.route('/api/alerts/bulk-triage', methods=['POST'])
+@token_required
+@analyst_or_admin_required
+def bulk_triage_alerts():
+    """Perform bulk triage operations on multiple alerts"""
+    try:
+        print(f"DEBUG: bulk_triage_alerts called")
+        print(f"DEBUG: request.headers: {dict(request.headers)}")
+        print(f"DEBUG: request.current_user: {getattr(request, 'current_user', 'NOT SET')}")
+        username = request.current_user['username']
+        data = request.get_json() or {}
+        print(f"DEBUG: request data: {data}")
+        
+        alert_ids = data.get('alert_ids', [])
+        action = data.get('action')  # flag, dismiss, escalate, assign, resolve
+        action_data = data.get('action_data', {})
+        
+        if not alert_ids or not action:
+            return jsonify({'error': 'alert_ids and action are required'}), 400
+        
+        # Handle both integer and ObjectId formats for alert_ids
+        processed_alert_ids = []
+        for aid in alert_ids:
+            try:
+                # Try integer first (for backward compatibility)
+                processed_alert_ids.append(int(aid))
+            except ValueError:
+                # If not integer, use as string (ObjectId)
+                processed_alert_ids.append(aid)
+        alert_ids = processed_alert_ids
+        print(f"DEBUG: Processed alert_ids: {alert_ids}")
+        
+        results = {'success': [], 'failed': []}
+        
+        for alert_id in alert_ids:
+            try:
+                if action == 'flag':
+                    success, message = dashboard_api.dal.update_alert(
+                        alert_id=alert_id,
+                        updates={'flagged': True, 'status': 'flagged'},
+                        updated_by=username
+                    )
+                elif action == 'dismiss':
+                    success, message = dashboard_api.dal.update_alert(
+                        alert_id=alert_id,
+                        updates={'dismissed': True, 'status': 'dismissed'},
+                        updated_by=username
+                    )
+                elif action == 'assign':
+                    assigned_to = action_data.get('assigned_to')
+                    if not assigned_to:
+                        results['failed'].append({'alert_id': alert_id, 'error': 'assigned_to required'})
+                        continue
+                    success, message = dashboard_api.dal.update_alert(
+                        alert_id=alert_id,
+                        updates={
+                            'status': 'assigned',
+                            'assigned_to': assigned_to,
+                            'assigned_by': username,
+                            'assignment_timestamp': datetime.now()
+                        },
+                        updated_by=username
+                    )
+                else:
+                    results['failed'].append({'alert_id': alert_id, 'error': f'Unsupported action: {action}'})
+                    continue
+                
+                if success:
+                    results['success'].append(alert_id)
+                    # Log the action
+                    dashboard_api.dal.create_audit_log(
+                        event_type=f'bulk_{action}',
+                        username=username,
+                        ip_address=get_client_info()[0],
+                        action=f"bulk_{action}",
+                        success=True,
+                        details={'alert_id': alert_id, 'action': action}
+                    )
+                else:
+                    results['failed'].append({'alert_id': alert_id, 'error': message})
+                    
+            except Exception as e:
+                results['failed'].append({'alert_id': alert_id, 'error': str(e)})
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'total_processed': len(alert_ids),
+            'successful': len(results['success']),
+            'failed': len(results['failed'])
+        })
+        
+    except Exception as e:
+        print(f"Error in bulk triage operation: {e}")
+        return jsonify({'error': 'Failed to perform bulk triage'}), 500
+
+# Get available analysts for assignment
+@app.route('/api/analysts', methods=['GET'])
+@token_required
+@analyst_or_admin_required
+def get_analysts():
+    """Get list of analysts available for alert assignment"""
+    try:
+        # Get all users with analyst or admin roles
+        users = dashboard_api.dal.get_all_users()
+        analysts = []
+        
+        for user in users:
+            if user.get('role') in ['analyst', 'senior_analyst', 'soc_manager', 'super_admin']:
+                analysts.append({
+                    'username': user['username'],
+                    'role': user['role'],
+                    'full_name': user.get('full_name', user['username']),
+                    'active': user.get('active', True)
+                })
+        
+        return jsonify({'analysts': analysts})
+        
+    except Exception as e:
+        print(f"Error getting analysts: {e}")
+        return jsonify({'error': 'Failed to get analysts'}), 500
 
 @app.route('/api/monitoring/start', methods=['POST'])
 @token_required

@@ -45,9 +45,9 @@ const ScoreDistribution = () => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-          <p className="font-medium text-gray-900">Score Range: {data.range}</p>
-          <p className="text-primary-600">Count: {data.count}</p>
+        <div className="bg-slate-800 backdrop-blur-sm p-4 border border-slate-600 rounded-lg shadow-2xl">
+          <p className="font-semibold text-white mb-2">Score Range: {data.range}</p>
+          <p className="text-sm text-gray-300">Count: <span className="font-medium text-white">{data.count}</span></p>
         </div>
       );
     }
@@ -58,8 +58,8 @@ const ScoreDistribution = () => {
     return (
       <div className="space-y-4">
         <div className="flex items-center space-x-2">
-          <BarChart3 className="h-5 w-5 text-gray-600" />
-          <h3 className="text-lg font-semibold text-gray-900">Score Distribution</h3>
+          <BarChart3 className="h-5 w-5 text-gray-400" />
+          <h3 className="text-lg font-semibold text-white">Score Distribution</h3>
         </div>
         <div className="h-64 flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -72,16 +72,16 @@ const ScoreDistribution = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <BarChart3 className="h-5 w-5 text-gray-600" />
-          <h3 className="text-lg font-semibold text-gray-900">Score Distribution</h3>
+          <BarChart3 className="h-5 w-5 text-gray-400" />
+          <h3 className="text-lg font-semibold text-white">Score Distribution</h3>
         </div>
         <div className="flex space-x-2">
           <button
             onClick={() => setChartType('bar')}
-            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+            className={`px-3 py-1 text-sm rounded-lg transition-colors ${
               chartType === 'bar' 
-                ? 'bg-primary-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/30' 
+                : 'bg-slate-700/50 text-gray-300 hover:bg-slate-600/50'
             }`}
           >
             Bar
@@ -91,7 +91,7 @@ const ScoreDistribution = () => {
             className={`px-3 py-1 text-sm rounded-md transition-colors ${
               chartType === 'line' 
                 ? 'bg-primary-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                : 'bg-gray-200 text-gray-300 hover:bg-gray-300'
             }`}
           >
             Line
@@ -103,30 +103,38 @@ const ScoreDistribution = () => {
         <ResponsiveContainer width="100%" height="100%">
           {chartType === 'bar' ? (
             <BarChart data={distributionData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
               <XAxis 
                 dataKey="score" 
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 12, fill: '#cbd5e1' }}
+                stroke="#cbd5e1"
                 interval="preserveStartEnd"
               />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip content={<CustomTooltip />} />
+              <YAxis 
+                tick={{ fontSize: 12, fill: '#cbd5e1' }}
+                stroke="#cbd5e1"
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }} />
               <Bar 
                 dataKey="count" 
                 fill="#3b82f6"
-                radius={[2, 2, 0, 0]}
+                radius={[8, 8, 0, 0]}
               />
             </BarChart>
           ) : (
             <LineChart data={distributionData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
               <XAxis 
                 dataKey="score" 
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 12, fill: '#cbd5e1' }}
+                stroke="#cbd5e1"
                 interval="preserveStartEnd"
               />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip content={<CustomTooltip />} />
+              <YAxis 
+                tick={{ fontSize: 12, fill: '#cbd5e1' }}
+                stroke="#cbd5e1"
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(59, 130, 246, 0.3)' }} />
               <Line 
                 type="monotone" 
                 dataKey="count" 
@@ -141,30 +149,30 @@ const ScoreDistribution = () => {
       </div>
 
       {/* Distribution Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-700/50">
         <div className="text-center">
           <div className="text-2xl font-bold text-success-600">
             {distributionData.filter(d => parseFloat(d.score) < 0.3).reduce((sum, d) => sum + d.count, 0)}
           </div>
-          <div className="text-xs text-gray-500">Low Risk (0.0-0.3)</div>
+          <div className="text-xs text-gray-400">Low Risk (0.0-0.3)</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-yellow-600">
             {distributionData.filter(d => parseFloat(d.score) >= 0.3 && parseFloat(d.score) < 0.6).reduce((sum, d) => sum + d.count, 0)}
           </div>
-          <div className="text-xs text-gray-500">Medium Risk (0.3-0.6)</div>
+          <div className="text-xs text-gray-400">Medium Risk (0.3-0.6)</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-warning-600">
             {distributionData.filter(d => parseFloat(d.score) >= 0.6 && parseFloat(d.score) < 0.8).reduce((sum, d) => sum + d.count, 0)}
           </div>
-          <div className="text-xs text-gray-500">High Risk (0.6-0.8)</div>
+          <div className="text-xs text-gray-400">High Risk (0.6-0.8)</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-danger-600">
             {distributionData.filter(d => parseFloat(d.score) >= 0.8).reduce((sum, d) => sum + d.count, 0)}
           </div>
-          <div className="text-xs text-gray-500">Critical (0.8+)</div>
+          <div className="text-xs text-gray-400">Critical (0.8+)</div>
         </div>
       </div>
     </div>

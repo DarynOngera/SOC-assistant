@@ -194,16 +194,31 @@ class MongoDBDAL:
             logger.error(f"Error getting alerts: {e}")
             return {"alerts": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
     
-    def update_alert(self, alert_id: int, updates: Dict[str, Any], 
+    def update_alert(self, alert_id, updates: Dict[str, Any], 
                     updated_by: str = None) -> Tuple[bool, str]:
-        """Update alert"""
+        """Update alert - handles both integer alert_id and ObjectId formats"""
         try:
             updates["updated_at"] = datetime.utcnow()
             if updated_by:
                 updates["updated_by"] = updated_by
             
+            # Handle both integer alert_id and ObjectId formats
+            if isinstance(alert_id, str) and len(alert_id) == 24:
+                # Looks like ObjectId string
+                try:
+                    query = {"_id": ObjectId(alert_id)}
+                    print(f"DEBUG: Using ObjectId query: {query}")
+                except Exception:
+                    # Fallback to string search
+                    query = {"alert_id": alert_id}
+                    print(f"DEBUG: Using string alert_id query: {query}")
+            else:
+                # Integer alert_id (backward compatibility)
+                query = {"alert_id": alert_id}
+                print(f"DEBUG: Using integer alert_id query: {query}")
+            
             result = self.db[COLLECTIONS["alerts"]].update_one(
-                {"alert_id": alert_id},
+                query,
                 {"$set": updates}
             )
             

@@ -285,35 +285,82 @@ class SupervisedSOCDetector:
         """
         Extract features from real-time data without labels for prediction
         """
-        # Ensure we have all required feature columns
-        missing_features = []
-        for feature in self.feature_columns:
-            if feature not in df.columns:
-                missing_features.append(feature)
+        if self.feature_columns is None:
+            raise ValueError("Model not trained - no feature columns available")
         
-        # Add missing features with default values
-        for feature in missing_features:
-            if 'rate' in feature or 'error' in feature:
-                df[feature] = 0.0  # Rate features default to 0
-            elif 'count' in feature:
-                df[feature] = 0  # Count features default to 0
-            elif 'bytes' in feature:
-                df[feature] = 0  # Byte counts default to 0
-            elif feature in ['land', 'wrong_fragment', 'urgent', 'logged_in', 'root_shell', 'su_attempted', 'is_host_login', 'is_guest_login']:
-                df[feature] = 0  # Binary features default to 0
-            elif feature == 'duration':
-                df[feature] = df.get('duration', 0.0)
+        # Log feature alignment issues only when they occur
+        input_features = set(df.columns)
+        expected_features = set(self.feature_columns)
+        missing_features = expected_features - input_features
+        extra_features = input_features - expected_features
+        
+        if missing_features:
+            if len(missing_features) <= 5:
+                print(f"[WARNING] Missing {len(missing_features)} features: {sorted(list(missing_features))}")
             else:
-                df[feature] = 0  # Default numeric features to 0
+                print(f"[WARNING] Missing {len(missing_features)} features (showing first 5): {sorted(list(missing_features))[:5]}")
         
-        # Extract features in the correct order
-        X = df[self.feature_columns].copy()
+        if extra_features and len(extra_features) > 5:
+            print(f"[INFO] Input has {len(extra_features)} extra features not used in training")
+        
+        # Add missing features with intelligent defaults
+        for feature in missing_features:
+            if any(keyword in feature.lower() for keyword in ['rate', 'error', 'ratio']):
+                df[feature] = 0.0  # Rate/ratio features default to 0
+            elif any(keyword in feature.lower() for keyword in ['count', 'num', 'cnt']):
+                df[feature] = 0  # Count features default to 0
+            elif any(keyword in feature.lower() for keyword in ['bytes', 'size', 'length']):
+                df[feature] = 0  # Size features default to 0
+            elif feature.lower() in ['land', 'wrong_fragment', 'urgent', 'logged_in', 'root_shell', 'su_attempted', 'is_host_login', 'is_guest_login']:
+                df[feature] = 0  # Binary features default to 0
+            elif feature.lower() == 'duration':
+                df[feature] = 0.0  # Duration defaults to 0
+            else:
+                df[feature] = 0  # Default all other features to 0
+        
+        # Extract features in the correct order - ensure ALL training features are present
+        try:
+            X = df[self.feature_columns].copy()
+        except KeyError as e:
+            print(f"[ERROR] Feature extraction failed: {e}")
+            print(f"  Available columns: {sorted(df.columns.tolist())[:10]}...")
+            print(f"  Required columns: {sorted(self.feature_columns)[:10]}...")
+            raise
+        
+        # Verify feature matrix dimensions match training expectations
+        expected_features = getattr(self.scaler, 'n_features_in_', len(self.feature_columns))
+        if X.shape[1] != expected_features:
+            print(f"[ERROR] Feature dimension mismatch:")
+            print(f"  Current matrix: {X.shape[1]} features")
+            print(f"  Scaler expects: {expected_features} features")
+            print(f"  Training features: {len(self.feature_columns)} features")
+            
+            # This indicates a mismatch between stored feature_columns and actual training
+            # The scaler was trained on more features than we have in feature_columns
+            if X.shape[1] < expected_features:
+                print(f"[WARNING] Padding feature matrix from {X.shape[1]} to {expected_features} features")
+                # Pad with zeros to match scaler expectations
+                import pandas as pd
+                padding_cols = expected_features - X.shape[1]
+                padding_data = pd.DataFrame(
+                    np.zeros((X.shape[0], padding_cols)), 
+                    columns=[f'missing_feature_{i}' for i in range(padding_cols)],
+                    index=X.index
+                )
+                X = pd.concat([X, padding_data], axis=1)
+                print(f"[INFO] Feature matrix padded to shape: {X.shape}")
         
         # Scale features
-        if fit_scaler:
-            X_scaled = self.scaler.fit_transform(X)
-        else:
-            X_scaled = self.scaler.transform(X)
+        try:
+            if fit_scaler:
+                X_scaled = self.scaler.fit_transform(X)
+            else:
+                X_scaled = self.scaler.transform(X)
+        except Exception as e:
+            print(f"[ERROR] Feature scaling failed: {e}")
+            print(f"  Feature matrix shape: {X.shape}")
+            print(f"  Scaler expects: {getattr(self.scaler, 'n_features_in_', 'unknown')} features")
+            raise
             
         return X_scaled
     
@@ -783,6 +830,11 @@ class SupervisedSOCDetector:
             import pandas as pd
             df = pd.DataFrame([record])
             
+            # Log input features for debugging (only first time or on error)
+            if not hasattr(self, '_logged_input_features'):
+                print(f"[DEBUG] Input record features ({len(record)}): {sorted(record.keys())[:10]}...")
+                self._logged_input_features = True
+            
             # Preprocess the data
             df = self.preprocess_data(df, fit_encoders=False)
             
@@ -821,7 +873,15 @@ class SupervisedSOCDetector:
             }
             
         except Exception as e:
-            print(f"Error in single prediction: {e}")
+            # Enhanced error logging for feature mismatch debugging
+            if "Feature names seen at fit time" in str(e):
+                print(f"[ERROR] Feature mismatch in prediction:")
+                print(f"  Input features: {sorted(record.keys()) if record else 'None'}")
+                print(f"  Expected features: {getattr(self, 'feature_columns', 'Not available')[:10] if hasattr(self, 'feature_columns') else 'Not available'}...")
+                print(f"  Model error: {str(e)[:200]}...")
+            else:
+                print(f"[ERROR] Prediction error: {str(e)[:100]}...")
+            
             # Return mock prediction as fallback
             return {
                 'prediction': 0,

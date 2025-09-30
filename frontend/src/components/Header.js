@@ -3,14 +3,14 @@ import { Shield, Activity, Play, Square } from 'lucide-react';
 
 const Header = ({ isConnected, onStartMonitoring, onStopMonitoring }) => {
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200">
+    <header className="bg-slate-800/50 backdrop-blur-sm shadow-sm border-b border-slate-700/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-6">
           <div className="flex items-center">
             <Shield className="h-8 w-8 text-primary-600 mr-3" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">SOC Dashboard</h1>
-              <p className="text-sm text-gray-500">Real-time Anomaly Detection System</p>
+              <h1 className="text-2xl font-bold text-white">SOC Dashboard</h1>
+              <p className="text-sm text-gray-400">Real-time Anomaly Detection System</p>
             </div>
           </div>
           
@@ -18,7 +18,7 @@ const Header = ({ isConnected, onStartMonitoring, onStopMonitoring }) => {
             {/* Connection Status */}
             <div className="flex items-center space-x-2">
               <div className={`status-indicator ${isConnected ? 'status-online' : 'status-offline'}`}></div>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-gray-400">
                 {isConnected ? 'Connected' : 'Disconnected'}
               </span>
             </div>

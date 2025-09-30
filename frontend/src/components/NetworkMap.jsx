@@ -411,8 +411,8 @@ const NetworkMap = () => {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-3 sm:space-y-0">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Network Topology</h2>
-          <p className="text-sm sm:text-base text-gray-600">Real-time network visualization and threat analysis</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white">Network Topology</h2>
+          <p className="text-sm sm:text-base text-gray-400">Real-time network visualization and threat analysis</p>
         </div>
         <button
           onClick={() => {
@@ -484,7 +484,7 @@ const NetworkMap = () => {
         <div className="flex items-center justify-center h-64 sm:h-96">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <div className="text-gray-500 text-sm sm:text-base">Loading network data...</div>
+            <div className="text-gray-400 text-sm sm:text-base">Loading network data...</div>
           </div>
         </div>
       ) : (

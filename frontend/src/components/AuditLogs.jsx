@@ -107,7 +107,7 @@ const AuditLogs = () => {
     const colors = {
       'login_success': 'bg-green-100 text-green-800',
       'login_failed': 'bg-red-100 text-red-800',
-      'logout': 'bg-gray-100 text-gray-800',
+      'logout': 'bg-slate-700/50 text-gray-800',
       'user_created': 'bg-blue-100 text-blue-800',
       'user_updated': 'bg-yellow-100 text-yellow-800',
       'user_deleted': 'bg-red-100 text-red-800',
@@ -118,7 +118,7 @@ const AuditLogs = () => {
       'mfa_enabled': 'bg-green-100 text-green-800',
       'mfa_disabled': 'bg-yellow-100 text-yellow-800'
     };
-    return colors[eventType] || 'bg-gray-100 text-gray-800';
+    return colors[eventType] || 'bg-slate-700/50 text-gray-800';
   };
 
   const formatEventType = (eventType) => {
@@ -133,7 +133,7 @@ const AuditLogs = () => {
       'medium': 'bg-yellow-100 text-yellow-800 border-yellow-200',
       'low': 'bg-blue-100 text-blue-800 border-blue-200'
     };
-    return colors[severity] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return colors[severity] || 'bg-slate-700/50 text-gray-800 border-slate-700/50';
   };
 
   // Export Button Component
@@ -247,12 +247,12 @@ const AuditLogs = () => {
         {/* Export Modal */}
         {showExportModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg p-6 w-full max-w-md mx-4">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Export Audit Data</h3>
+                <h3 className="text-lg font-semibold text-white">Export Audit Data</h3>
                 <button
                   onClick={() => setShowExportModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-400"
                 >
                   ×
                 </button>
@@ -261,7 +261,7 @@ const AuditLogs = () => {
               <div className="space-y-4">
                 {/* Format Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Export Format
                   </label>
                   <div className="grid grid-cols-2 gap-2">
@@ -272,7 +272,7 @@ const AuditLogs = () => {
                         className={`p-2 border rounded-lg flex items-center gap-2 text-sm transition-colors ${
                           exportConfig.format === format.value
                             ? 'border-blue-500 bg-blue-50 text-blue-700'
-                            : 'border-gray-300 hover:border-gray-400'
+                            : 'border-slate-600/50 hover:border-gray-400'
                         }`}
                       >
                         {getFormatIcon(format.value)}
@@ -284,13 +284,13 @@ const AuditLogs = () => {
 
                 {/* Severity Filter */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Severity Filter (Optional)
                   </label>
                   <select
                     value={exportConfig.severity}
                     onChange={(e) => setExportConfig(prev => ({ ...prev, severity: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">All Severity Levels</option>
                     <option value="high">High</option>
@@ -306,16 +306,16 @@ const AuditLogs = () => {
                       type="checkbox"
                       checked={exportConfig.includeSummary}
                       onChange={(e) => setExportConfig(prev => ({ ...prev, includeSummary: e.target.checked }))}
-                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-600/50 rounded"
                     />
-                    <span className="text-sm text-gray-700">Include summary statistics</span>
+                    <span className="text-sm text-gray-300">Include summary statistics</span>
                   </label>
                 </div>
 
                 {/* Current Filters Info */}
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <p className="text-sm font-medium text-gray-700 mb-1">Current Filters:</p>
-                  <div className="text-xs text-gray-600 space-y-1">
+                <div className="bg-slate-900/50 p-3 rounded-lg">
+                  <p className="text-sm font-medium text-gray-300 mb-1">Current Filters:</p>
+                  <div className="text-xs text-gray-400 space-y-1">
                     {filters.username && <p>Username: {filters.username}</p>}
                     {filters.event_type && <p>Event Type: {filters.event_type}</p>}
                     {filters.start_date && <p>Start Date: {filters.start_date}</p>}
@@ -330,7 +330,7 @@ const AuditLogs = () => {
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   onClick={() => setShowExportModal(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                  className="px-4 py-2 text-gray-400 hover:text-gray-800 transition-colors"
                 >
                   Cancel
                 </button>
@@ -368,11 +368,11 @@ const AuditLogs = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+          <h2 className="text-2xl font-bold text-white flex items-center">
             <Activity className="h-6 w-6 mr-2" />
             Audit Logs
           </h2>
-          <p className="text-gray-600">Monitor all system activities and security events</p>
+          <p className="text-gray-400">Monitor all system activities and security events</p>
         </div>
         <ExportButton filters={filters} />
       </div>
@@ -380,39 +380,39 @@ const AuditLogs = () => {
       {/* Summary Cards */}
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
+          <div className="bg-slate-800/50 backdrop-blur-sm p-4 rounded-lg shadow-sm border">
             <div className="flex items-center">
               <Activity className="h-8 w-8 text-blue-500" />
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Total Events (30d)</p>
-                <p className="text-2xl font-bold text-gray-900">{summary.total_events}</p>
+                <p className="text-sm font-medium text-gray-400">Total Events (30d)</p>
+                <p className="text-2xl font-bold text-white">{summary.total_events}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
+          <div className="bg-slate-800/50 backdrop-blur-sm p-4 rounded-lg shadow-sm border">
             <div className="flex items-center">
               <User className="h-8 w-8 text-green-500" />
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Successful Logins</p>
-                <p className="text-2xl font-bold text-gray-900">{summary.login_stats?.successful || 0}</p>
+                <p className="text-sm font-medium text-gray-400">Successful Logins</p>
+                <p className="text-2xl font-bold text-white">{summary.login_stats?.successful || 0}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
+          <div className="bg-slate-800/50 backdrop-blur-sm p-4 rounded-lg shadow-sm border">
             <div className="flex items-center">
               <AlertTriangle className="h-8 w-8 text-red-500" />
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Failed Logins</p>
-                <p className="text-2xl font-bold text-gray-900">{summary.login_stats?.failed || 0}</p>
+                <p className="text-sm font-medium text-gray-400">Failed Logins</p>
+                <p className="text-2xl font-bold text-white">{summary.login_stats?.failed || 0}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
+          <div className="bg-slate-800/50 backdrop-blur-sm p-4 rounded-lg shadow-sm border">
             <div className="flex items-center">
               <Shield className="h-8 w-8 text-purple-500" />
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Success Rate</p>
-                <p className="text-2xl font-bold text-gray-900">{summary.login_stats?.success_rate || 0}%</p>
+                <p className="text-sm font-medium text-gray-400">Success Rate</p>
+                <p className="text-2xl font-bold text-white">{summary.login_stats?.success_rate || 0}%</p>
               </div>
             </div>
           </div>
@@ -421,8 +421,8 @@ const AuditLogs = () => {
 
       {/* Security Alerts */}
       {securityAlerts && securityAlerts.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+        <div className="bg-slate-800/50 backdrop-blur-sm p-6 rounded-lg shadow-sm border">
+          <h3 className="text-lg font-medium text-white mb-4 flex items-center">
             <AlertTriangle className="h-5 w-5 text-red-500 mr-2" />
             Security Alerts (Last 7 Days)
           </h3>
@@ -443,7 +443,7 @@ const AuditLogs = () => {
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(alert.severity)}`}>
                       {alert.severity.toUpperCase()}
                     </span>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-gray-400 mt-1">
                       {new Date(alert.timestamp).toLocaleString()}
                     </p>
                   </div>
@@ -455,24 +455,24 @@ const AuditLogs = () => {
       )}
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border">
+      <div className="bg-slate-800/50 backdrop-blur-sm p-4 rounded-lg shadow-sm border">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Username</label>
             <input
               type="text"
               value={filters.username}
               onChange={(e) => handleFilterChange('username', e.target.value)}
               placeholder="Filter by username"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Event Type</label>
             <select
               value={filters.event_type}
               onChange={(e) => handleFilterChange('event_type', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             >
               <option value="">All Events</option>
               <option value="login_success">Login Success</option>
@@ -486,29 +486,29 @@ const AuditLogs = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Start Date</label>
             <input
               type="date"
               value={filters.start_date}
               onChange={(e) => handleFilterChange('start_date', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">End Date</label>
             <input
               type="date"
               value={filters.end_date}
               onChange={(e) => handleFilterChange('end_date', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Limit</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Limit</label>
             <select
               value={filters.limit}
               onChange={(e) => handleFilterChange('limit', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             >
               <option value={25}>25</option>
               <option value={50}>50</option>
@@ -532,25 +532,25 @@ const AuditLogs = () => {
       )}
 
       {/* Audit Logs Table */}
-      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
+      <div className="bg-slate-800/50 backdrop-blur-sm shadow-sm rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-700/50">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-medium text-gray-900">Audit Events</h3>
+            <h3 className="text-lg font-medium text-white">Audit Events</h3>
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => handlePageChange('prev')}
                 disabled={filters.offset === 0}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                className="p-2 text-gray-400 hover:text-gray-400 disabled:opacity-50"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-gray-400">
                 {filters.offset + 1} - {filters.offset + Math.min(filters.limit, logs?.length || 0)}
               </span>
               <button
                 onClick={() => handlePageChange('next')}
                 disabled={(logs?.length || 0) < filters.limit}
-                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                className="p-2 text-gray-400 hover:text-gray-400 disabled:opacity-50"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -564,33 +564,33 @@ const AuditLogs = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-slate-700/50">
+              <thead className="bg-slate-900/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Timestamp
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Event
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     User
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     IP Address
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Details
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-slate-800/50 backdrop-blur-sm divide-y divide-slate-700/50">
                 {(logs || []).map((log, index) => (
-                  <tr key={log.id || `${log.timestamp}-${index}-${Math.random()}`} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <tr key={log.id || `${log.timestamp}-${index}-${Math.random()}`} className="hover:bg-slate-900/50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                       {new Date(log.timestamp).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -598,10 +598,10 @@ const AuditLogs = () => {
                         {formatEventType(log.event_type)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                       {log.username || 'N/A'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {log.ip_address || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -611,7 +611,7 @@ const AuditLogs = () => {
                         {log.success ? 'Success' : 'Failed'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
+                    <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">
                       {log.details && Object.keys(log.details).length > 0 
                         ? JSON.stringify(log.details)
                         : log.error_message || 'N/A'
@@ -625,8 +625,8 @@ const AuditLogs = () => {
             {(!logs || logs.length === 0) && (
               <div className="text-center py-12">
                 <Activity className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No audit logs found</h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <h3 className="mt-2 text-sm font-medium text-white">No audit logs found</h3>
+                <p className="mt-1 text-sm text-gray-400">
                   Try adjusting your filter criteria.
                 </p>
               </div>

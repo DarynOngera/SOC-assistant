@@ -137,10 +137,10 @@ const CSVUpload = ({ onUploadSuccess, onAnalysisComplete }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-lg p-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">CSV Anomaly Detection</h2>
-        <p className="text-gray-600">Upload a CSV file to detect anomalies using trained ML models</p>
+        <h2 className="text-2xl font-bold text-white mb-2">CSV Anomaly Detection</h2>
+        <p className="text-gray-400">Upload a CSV file to detect anomalies using trained ML models</p>
       </div>
 
       {!uploadedFile ? (
@@ -149,7 +149,7 @@ const CSVUpload = ({ onUploadSuccess, onAnalysisComplete }) => {
           className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
             dragActive 
               ? 'border-blue-400 bg-blue-50' 
-              : 'border-gray-300 hover:border-gray-400'
+              : 'border-slate-600/50 hover:border-gray-400'
           }`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
@@ -168,16 +168,16 @@ const CSVUpload = ({ onUploadSuccess, onAnalysisComplete }) => {
             {uploadStatus === 'uploading' ? (
               <div className="flex flex-col items-center">
                 <Loader className="w-12 h-12 text-blue-500 animate-spin mb-2" />
-                <p className="text-lg font-medium text-gray-900">Uploading...</p>
+                <p className="text-lg font-medium text-white">Uploading...</p>
               </div>
             ) : (
               <>
                 <Upload className="w-12 h-12 text-gray-400 mx-auto" />
                 <div>
-                  <p className="text-lg font-medium text-gray-900">
+                  <p className="text-lg font-medium text-white">
                     Drop your CSV file here, or click to browse
                   </p>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-gray-400 mt-1">
                     Maximum file size: 100MB
                   </p>
                 </div>
@@ -209,11 +209,11 @@ const CSVUpload = ({ onUploadSuccess, onAnalysisComplete }) => {
           </div>
 
           {/* Analysis Configuration */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Analysis Configuration</h3>
+          <div className="bg-slate-900/50 rounded-lg p-4">
+            <h3 className="text-lg font-medium text-white mb-4">Analysis Configuration</h3>
             <div className="space-y-4">
               <div>
-                <label htmlFor="sampleSize" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="sampleSize" className="block text-sm font-medium text-gray-300 mb-1">
                   Sample Size (optional)
                 </label>
                 <input
@@ -222,11 +222,11 @@ const CSVUpload = ({ onUploadSuccess, onAnalysisComplete }) => {
                   value={sampleSize}
                   onChange={(e) => setSampleSize(e.target.value)}
                   placeholder="Leave empty to analyze all rows (max 100,000)"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-600/50 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   min="100"
                   max="100000"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   Limit the number of rows to analyze for faster processing
                 </p>
               </div>
