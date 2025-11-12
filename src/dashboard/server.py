@@ -343,12 +343,18 @@ class SOCDashboardAPI:
             logger.info(f"Loading models from: {model_dir}")
             if os.path.exists(model_dir):
                 logger.debug(f"Available model files: {os.listdir(model_dir)}")
+                self.detector.load_models(model_dir)
+                logger.info("Models loaded successfully")
             else:
-                logger.warning("Models directory not found")
-            self.detector.load_models(model_dir)
-            logger.info("Models loaded successfully")
+                # Try alternative path
+                alt_model_dir = '../models'
+                if os.path.exists(alt_model_dir):
+                    self.detector.load_models(alt_model_dir)
+                    logger.info(f"Models loaded from: {alt_model_dir}")
+                else:
+                    logger.debug("Models will be loaded on demand")
         except Exception as e:
-            logger.error(f"Error loading models: {e}")
+            logger.debug(f"Models not loaded: {e}")
             self.detector = None
     
     def _initialize_system_stats(self):
@@ -1781,6 +1787,75 @@ def get_network_topology():
     except Exception as e:
         print(f"Error getting network topology: {e}")
         return jsonify({'error': 'Failed to get network topology'}), 500
+
+@app.route('/api/network/mininet-topology')
+@token_required
+@analyst_or_admin_required
+def get_mininet_topology():
+    """Get Mininet network topology structure"""
+    try:
+        import json
+        import os
+        
+        # Path to the topology file
+        topology_file = os.path.join(
+            os.path.dirname(__file__),
+            '../../mininet_data_generation/data_capture/mininet_topology.json'
+        )
+        
+        # Check if topology file exists
+        if not os.path.exists(topology_file):
+            # Return empty topology if file doesn't exist
+            return jsonify({
+                'available': False,
+                'message': 'Mininet topology not yet generated. Run topology_exporter.py first.'
+            })
+        
+        # Load topology from file
+        with open(topology_file, 'r') as f:
+            topology = json.load(f)
+        
+        # Enrich topology with alert data
+        alerts_data = mongodb_dal.get_alerts(per_page=500)
+        alerts = alerts_data.get('alerts', [])
+        
+        # Create IP to alert mapping
+        ip_alerts = {}
+        for alert in alerts:
+            for ip_field in ['source_ip', 'destination_ip']:
+                ip = alert.get(ip_field)
+                if ip:
+                    if ip not in ip_alerts:
+                        ip_alerts[ip] = {
+                            'count': 0,
+                            'severity_counts': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0},
+                            'attack_types': set()
+                        }
+                    ip_alerts[ip]['count'] += 1
+                    severity = alert.get('severity', 'low').lower()
+                    ip_alerts[ip]['severity_counts'][severity] += 1
+                    ip_alerts[ip]['attack_types'].add(alert.get('attack_type', 'Unknown'))
+        
+        # Enrich hosts with alert data
+        for host in topology.get('hosts', []):
+            ip = host.get('ip')
+            if ip in ip_alerts:
+                host['alert_count'] = ip_alerts[ip]['count']
+                host['severity_counts'] = ip_alerts[ip]['severity_counts']
+                host['attack_types'] = list(ip_alerts[ip]['attack_types'])
+            else:
+                host['alert_count'] = 0
+                host['severity_counts'] = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+                host['attack_types'] = []
+        
+        topology['available'] = True
+        return jsonify(topology)
+        
+    except Exception as e:
+        print(f"Error getting Mininet topology: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to get Mininet topology', 'available': False}), 500
 
 def get_subnet(ip):
     """Get subnet classification for IP address"""
@@ -3706,6 +3781,7 @@ def cleanup_csv_files():
 @socketio.on('connect')
 def handle_connect(auth):
     """Handle client connection with authentication"""
+    from flask_socketio import disconnect
     try:
         # Check for authentication token
         token = auth.get('token') if auth else None

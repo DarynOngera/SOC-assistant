@@ -4,17 +4,17 @@
 
 @layer base {
   body {
-    @apply bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900 text-gray-100;
+    @apply bg-slate-900 text-gray-100;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-xl border border-slate-700/50 p-4 sm:p-6;
+    @apply bg-slate-800/50 backdrop-blur-sm rounded-lg border border-slate-700/50 p-4 sm:p-6;
   }
   
   .card-compact {
-    @apply bg-slate-800/50 backdrop-blur-sm rounded-lg shadow-xl border border-slate-700/50 p-3 sm:p-4;
+    @apply bg-slate-800/50 backdrop-blur-sm rounded-lg border border-slate-700/50 p-3 sm:p-4;
   }
   
   .btn-primary {
@@ -115,7 +115,7 @@
   
   /* Mobile-first navigation */
   .nav-mobile {
-    @apply fixed inset-x-0 top-0 z-50 bg-white shadow-lg lg:relative lg:shadow-none;
+    @apply fixed inset-x-0 top-0 z-50 bg-white lg:relative;
   }
   
   /* Responsive tables */
