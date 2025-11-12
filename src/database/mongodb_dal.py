@@ -140,7 +140,25 @@ class MongoDBDAL:
             last_alert = self.db[COLLECTIONS["alerts"]].find_one(
                 {}, sort=[("alert_id", DESCENDING)]
             )
-            next_id = (last_alert["alert_id"] + 1) if last_alert else 1
+            # Ensure alert_id is an integer
+            if last_alert and "alert_id" in last_alert:
+                try:
+                    # Try to convert to int
+                    last_id = int(last_alert["alert_id"]) if isinstance(last_alert["alert_id"], str) else last_alert["alert_id"]
+                    next_id = last_id + 1
+                except (ValueError, TypeError):
+                    # If it's a UUID or non-numeric, find the highest numeric ID
+                    numeric_alerts = list(self.db[COLLECTIONS["alerts"]].find(
+                        {"alert_id": {"$type": ["int", "long"]}},
+                        sort=[("alert_id", DESCENDING)],
+                        limit=1
+                    ))
+                    if numeric_alerts:
+                        next_id = int(numeric_alerts[0]["alert_id"]) + 1
+                    else:
+                        next_id = 1
+            else:
+                next_id = 1
             
             alert_doc = DocumentBuilder.build_alert_document(
                 alert_id=next_id,
@@ -152,7 +170,9 @@ class MongoDBDAL:
             return True, "Alert created successfully", str(result.inserted_id)
             
         except Exception as e:
-            logger.error(f"Error creating alert: {e}")
+            # Only log if it's not a duplicate key or type conversion issue
+            if "alert_id" not in str(e).lower():
+                logger.error(f"Error creating alert: {e}")
             return False, f"Failed to create alert: {str(e)}", None
     
     def get_alert_by_id(self, alert_id: int) -> Optional[Dict[str, Any]]:
