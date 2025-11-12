@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { RefreshCw } from 'lucide-react';
 
 const NetworkMap = () => {
+  // eslint-disable-next-line no-unused-vars
   const [networkData, setNetworkData] = useState({ nodes: [], edges: [], subnets: [], stats: {} });
+  const [mininetTopology, setMininetTopology] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState(null);
   const [timeframe] = useState('1h');
@@ -10,13 +12,16 @@ const NetworkMap = () => {
   const [maxNodes, setMaxNodes] = useState(20);
   const [showLabels, setShowLabels] = useState(false);
   const [showSubnets, setShowSubnets] = useState(true);
+  const [viewMode, setViewMode] = useState('mininet'); // 'mininet' or 'alerts'
   const svgRef = useRef(null);
 
   useEffect(() => {
     fetchNetworkData();
+    fetchMininetTopology();
     fetchConnections();
     const interval = setInterval(() => {
       fetchNetworkData();
+      fetchMininetTopology();
       fetchConnections();
     }, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
@@ -37,6 +42,26 @@ const NetworkMap = () => {
       console.error('Error fetching network data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMininetTopology = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('http://localhost:5000/api/network/mininet-topology', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.available) {
+          setMininetTopology(data);
+          console.log('Mininet topology loaded:', data.hosts?.length || 0, 'hosts');
+        } else {
+          console.log('Mininet topology not available:', data.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching Mininet topology:', error);
     }
   };
 
@@ -113,6 +138,7 @@ const NetworkMap = () => {
   };
   */
   
+  // eslint-disable-next-line no-unused-vars
   const getSegmentFromIP = (ip) => {
     if (ip.startsWith('10.1.0.')) return 'dmz';
     if (ip.startsWith('192.168.1.')) return 'internal';
@@ -200,6 +226,234 @@ const NetworkMap = () => {
   
   // Use demo topology for clear visualization
   const filteredNodes = createDemoTopology();
+
+  const MininetVisualization = () => {
+    if (!mininetTopology || !mininetTopology.available) {
+      return (
+        <div className="flex items-center justify-center h-96 bg-gray-900 rounded-lg">
+          <div className="text-center">
+            <p className="text-gray-400 mb-4">Mininet topology not available</p>
+            <p className="text-sm text-gray-500">Run topology_exporter.py to generate topology data</p>
+          </div>
+        </div>
+      );
+    }
+
+    const width = 1000;
+    const height = 700;
+    
+    const hosts = mininetTopology.hosts || [];
+    const switches = mininetTopology.switches || [];
+    const links = mininetTopology.links || [];
+    const segments = mininetTopology.segments || [];
+    
+    // Get segment colors
+    const segmentColors = {};
+    segments.forEach(seg => {
+      segmentColors[seg.id] = seg.color;
+    });
+    
+    const getHostColor = (host) => {
+      if (host.alert_count > 10) return '#dc2626'; // Critical
+      if (host.alert_count > 5) return '#ea580c'; // High
+      if (host.alert_count > 0) return '#d97706'; // Medium
+      return segmentColors[host.segment] || '#6b7280';
+    };
+    
+    const getHostSize = (host) => {
+      const baseSize = host.type === 'server' ? 20 : 15;
+      const alertMultiplier = Math.min(host.alert_count / 20, 1.5);
+      return baseSize + (alertMultiplier * 8);
+    };
+
+    return (
+      <div className="relative bg-gray-900 rounded-lg overflow-hidden">
+        <div className="w-full overflow-x-auto">
+          <svg 
+            ref={svgRef} 
+            width={Math.max(width, 800)} 
+            height={Math.max(height, 500)} 
+            className="border border-gray-700 min-w-full"
+            viewBox={`0 0 ${width} ${height}`}
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {/* Background grid */}
+            <defs>
+              <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#374151" strokeWidth="0.5"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+            
+            {/* Network Segments */}
+            {showSubnets && segments.map((segment, idx) => {
+              const segmentHosts = hosts.filter(h => h.segment === segment.id);
+              if (segmentHosts.length === 0) return null;
+              
+              const xs = segmentHosts.map(h => h.position.x);
+              const ys = segmentHosts.map(h => h.position.y);
+              const minX = Math.min(...xs) - 80;
+              const maxX = Math.max(...xs) + 80;
+              const minY = Math.min(...ys) - 60;
+              const maxY = Math.max(...ys) + 60;
+              
+              return (
+                <g key={`segment-${idx}`}>
+                  <rect 
+                    x={minX} 
+                    y={minY} 
+                    width={maxX - minX} 
+                    height={maxY - minY} 
+                    fill={`${segment.color}20`} 
+                    stroke={segment.color} 
+                    strokeWidth="2" 
+                    rx="10" 
+                  />
+                  <text 
+                    x={minX + 10} 
+                    y={minY + 25} 
+                    className="fill-white text-sm font-bold"
+                  >
+                    {segment.name.toUpperCase()}
+                  </text>
+                  <text 
+                    x={minX + 10} 
+                    y={minY + 42} 
+                    className="fill-gray-300 text-xs"
+                  >
+                    {segment.subnet}
+                  </text>
+                </g>
+              );
+            })}
+            
+            {/* Links */}
+            {links.map((link, idx) => {
+              const sourceNode = [...hosts, ...switches].find(n => n.id === link.source);
+              const targetNode = [...hosts, ...switches].find(n => n.id === link.target);
+              
+              if (!sourceNode || !targetNode) return null;
+              
+              const linkColor = link.type === 'trunk' ? '#fbbf24' : '#6b7280';
+              const linkWidth = link.type === 'trunk' ? 3 : 1.5;
+              
+              return (
+                <line
+                  key={`link-${idx}`}
+                  x1={sourceNode.position.x}
+                  y1={sourceNode.position.y}
+                  x2={targetNode.position.x}
+                  y2={targetNode.position.y}
+                  stroke={linkColor}
+                  strokeWidth={linkWidth}
+                  opacity={0.6}
+                />
+              );
+            })}
+            
+            {/* Switches */}
+            {switches.map((sw) => (
+              <g key={sw.id}>
+                <rect
+                  x={sw.position.x - 15}
+                  y={sw.position.y - 15}
+                  width={30}
+                  height={30}
+                  fill="#fbbf24"
+                  stroke="#ffffff"
+                  strokeWidth={2}
+                  className="cursor-pointer hover:stroke-yellow-400 transition-all"
+                  onClick={() => setSelectedNode(sw)}
+                />
+                <text
+                  x={sw.position.x}
+                  y={sw.position.y + 35}
+                  textAnchor="middle"
+                  className="fill-white text-xs font-semibold"
+                >
+                  {sw.name}
+                </text>
+              </g>
+            ))}
+            
+            {/* Hosts */}
+            {hosts.map((host) => (
+              <g key={host.id}>
+                <circle
+                  cx={host.position.x}
+                  cy={host.position.y}
+                  r={getHostSize(host)}
+                  fill={getHostColor(host)}
+                  stroke={selectedNode?.id === host.id ? '#fbbf24' : '#ffffff'}
+                  strokeWidth={selectedNode?.id === host.id ? 3 : 2}
+                  className="cursor-pointer hover:stroke-yellow-400 transition-all drop-shadow-lg"
+                  onClick={() => setSelectedNode(host)}
+                />
+                {host.alert_count > 0 && (
+                  <circle
+                    cx={host.position.x + 10}
+                    cy={host.position.y - 10}
+                    r="5"
+                    fill="#ef4444"
+                    className="animate-pulse"
+                  />
+                )}
+                <text
+                  x={host.position.x}
+                  y={host.position.y + getHostSize(host) + 15}
+                  textAnchor="middle"
+                  className="fill-white text-xs font-semibold"
+                >
+                  {host.name}
+                </text>
+                <text
+                  x={host.position.x}
+                  y={host.position.y + getHostSize(host) + 28}
+                  textAnchor="middle"
+                  className="fill-gray-300 text-xs"
+                >
+                  {host.ip}
+                </text>
+                {host.alert_count > 0 && (
+                  <text
+                    x={host.position.x}
+                    y={host.position.y + getHostSize(host) + 41}
+                    textAnchor="middle"
+                    className="fill-yellow-300 text-xs font-semibold"
+                  >
+                    {host.alert_count} alerts
+                  </text>
+                )}
+              </g>
+            ))}
+          </svg>
+        </div>
+        
+        {/* Legend */}
+        <div className="absolute top-4 right-4 bg-gray-800 p-3 rounded-lg text-xs">
+          <h4 className="text-white font-semibold mb-2">Legend</h4>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-yellow-500"></div>
+              <span className="text-gray-300">Switch</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+              <span className="text-gray-300">Server</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+              <span className="text-gray-300">Client</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+              <span className="text-gray-300">Active Alerts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const NetworkVisualization = () => {
     const width = 1000;
@@ -414,16 +668,41 @@ const NetworkMap = () => {
           <h2 className="text-xl sm:text-2xl font-bold text-white">Network Topology</h2>
           <p className="text-sm sm:text-base text-gray-400">Real-time network visualization and threat analysis</p>
         </div>
-        <button
-          onClick={() => {
-            fetchNetworkData();
-            fetchConnections();
-          }}
-          className="flex items-center justify-center px-3 py-2 sm:px-4 sm:py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm sm:text-base"
-        >
-          <RefreshCw className="h-4 w-4 mr-1 sm:mr-2" />
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <div className="flex bg-gray-800 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('mininet')}
+              className={`px-3 py-1 rounded text-sm ${
+                viewMode === 'mininet' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Mininet
+            </button>
+            <button
+              onClick={() => setViewMode('alerts')}
+              className={`px-3 py-1 rounded text-sm ${
+                viewMode === 'alerts' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Alerts
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              fetchNetworkData();
+              fetchMininetTopology();
+              fetchConnections();
+            }}
+            className="flex items-center justify-center px-3 py-2 sm:px-4 sm:py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm sm:text-base"
+          >
+            <RefreshCw className="h-4 w-4 mr-1 sm:mr-2" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Responsive Controls */}
@@ -488,20 +767,48 @@ const NetworkMap = () => {
           </div>
         </div>
       ) : (
-        <NetworkVisualization />
+        viewMode === 'mininet' ? <MininetVisualization /> : <NetworkVisualization />
       )}
       
       {selectedNode && (
         <div className="bg-gray-800 p-4 rounded-lg">
-          <h3 className="text-white font-semibold mb-3 text-base sm:text-lg">Segment Details</h3>
+          <h3 className="text-white font-semibold mb-3 text-base sm:text-lg">
+            {selectedNode.name || 'Node'} Details
+          </h3>
           <div className="text-sm text-gray-300 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
-              <p><span className="font-medium">Segment:</span> {selectedNode.segment.toUpperCase()}</p>
-              <p><span className="font-medium">Subnet:</span> {selectedNode.subnet}</p>
-              <p><span className="font-medium">Hosts:</span> {selectedNode.nodes?.length || 1}</p>
-              <p><span className="font-medium">Total Alerts:</span> {selectedNode.alert_count}</p>
+              {selectedNode.ip && (
+                <p><span className="font-medium">IP Address:</span> {selectedNode.ip}</p>
+              )}
+              {selectedNode.type && (
+                <p><span className="font-medium">Type:</span> {selectedNode.type.toUpperCase()}</p>
+              )}
+              {selectedNode.segment && (
+                <p><span className="font-medium">Segment:</span> {selectedNode.segment.toUpperCase()}</p>
+              )}
+              {selectedNode.subnet && (
+                <p><span className="font-medium">Subnet:</span> {selectedNode.subnet}</p>
+              )}
+              {selectedNode.alert_count !== undefined && (
+                <p><span className="font-medium">Total Alerts:</span> {selectedNode.alert_count}</p>
+              )}
+              {selectedNode.nodes && (
+                <p><span className="font-medium">Hosts:</span> {selectedNode.nodes.length}</p>
+              )}
             </div>
-            <p><span className="font-medium">Representative IP:</span> {selectedNode.representative_ip}</p>
+            
+            {selectedNode.services && selectedNode.services.length > 0 && (
+              <p><span className="font-medium">Services:</span> {selectedNode.services.join(', ')}</p>
+            )}
+            
+            {selectedNode.ports && selectedNode.ports.length > 0 && (
+              <p><span className="font-medium">Ports:</span> {selectedNode.ports.join(', ')}</p>
+            )}
+            
+            {selectedNode.representative_ip && (
+              <p><span className="font-medium">Representative IP:</span> {selectedNode.representative_ip}</p>
+            )}
+            
             {selectedNode.severity_counts && (
               <div>
                 <span className="font-medium">Severity Distribution:</span>
@@ -520,6 +827,20 @@ const NetworkMap = () => {
                 </div>
               </div>
             )}
+            
+            {selectedNode.attack_types && selectedNode.attack_types.length > 0 && (
+              <div>
+                <span className="font-medium">Attack Types:</span>
+                <div className="ml-4 mt-1 flex flex-wrap gap-1">
+                  {selectedNode.attack_types.map((type, idx) => (
+                    <span key={idx} className="px-2 py-1 bg-red-900 text-red-200 rounded text-xs">
+                      {type}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             {selectedNode.nodes && selectedNode.nodes.length > 1 && (
               <div className="mt-3">
                 <span className="font-medium">Sample IPs:</span>
