@@ -17,7 +17,8 @@ import AuditLogs from './components/AuditLogs';
 import AuditExport from './components/AuditExport';
 import CSVAnalysis from './components/CSVAnalysis';
 import NetworkMap from './components/NetworkMap';
-import { Shield, Activity, AlertTriangle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target, Network, Menu, X, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import MininetSimulation from './components/MininetSimulation';
+import { Shield, Activity, AlertTriangle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target, Network, Menu, X, Download, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -235,6 +236,7 @@ function App() {
     const navItems = [
       { id: 'dashboard', label: 'Dashboard', icon: Activity, roles: ['admin', 'analyst'] },
       { id: 'network-map', label: 'Network Map', icon: Network, roles: ['admin', 'analyst'] },
+      { id: 'mininet-simulation', label: 'Mininet Simulation', icon: Zap, roles: ['admin'] },
       { id: 'threat-analysis', label: 'Threat Analysis', icon: TrendingUp, roles: ['admin', 'analyst'] },
       { id: 'threat-triage', label: 'Threat Triage', icon: Target, roles: ['admin', 'analyst'] },
       { id: 'csv-analysis', label: 'CSV Analysis', icon: Upload, roles: ['admin', 'analyst'] },
@@ -403,6 +405,8 @@ function App() {
     switch (currentView) {
       case 'network-map':
         return <NetworkMap />;
+      case 'mininet-simulation':
+        return user.role === 'admin' ? <MininetSimulation /> : null;
       case 'threat-analysis':
         return (
           <div className="space-y-8">

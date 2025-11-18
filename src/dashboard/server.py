@@ -325,36 +325,63 @@ class SOCDashboardAPI:
     def __init__(self):
         self.detector = None
         self.dal = get_dal()
-        self.threshold = 0.5
+        self.threshold = 0.7  # Increased from 0.5 to reduce false positives
+        self.presentation_mode = False  # Toggle for demo presentations
         self.is_monitoring = False
         self.load_models()
         
         # Initialize system stats in MongoDB if not exists
         self._initialize_system_stats()
         
+        # Attack simulation state
+        self.simulation_active = False
+        self.current_simulation = None
+        self.simulation_duration = 0
+        self.simulation_start_time = None
+        
+        # Mininet integration state
+        self.mininet_active = False
+        self.mininet_process = None
+        self.mininet_mode = 'normal'  # 'normal' or 'attack'
+        self.available_attacks = [
+            'syn_flood', 'port_scan', 'udp_flood', 'icmp_flood',
+            'http_flood', 'dns_amplification', 'brute_force', 'slowloris'
+        ]
+        
     def load_models(self):
-        """Load the latest trained models"""
+        """Load ML models for anomaly detection"""
         try:
-            # Try to import and initialize the detector
             from src.models.supervised_trainer import SupervisedSOCDetector
-            self.detector = SupervisedSOCDetector()
+            import os
             
-            model_dir = 'models'
-            logger.info(f"Loading models from: {model_dir}")
-            if os.path.exists(model_dir):
-                logger.debug(f"Available model files: {os.listdir(model_dir)}")
-                self.detector.load_models(model_dir)
-                logger.info("Models loaded successfully")
-            else:
-                # Try alternative path
-                alt_model_dir = '../models'
-                if os.path.exists(alt_model_dir):
-                    self.detector.load_models(alt_model_dir)
-                    logger.info(f"Models loaded from: {alt_model_dir}")
-                else:
-                    logger.debug("Models will be loaded on demand")
+            # Find the correct models directory regardless of current working directory
+            possible_model_paths = [
+                'models',  # If running from project root
+                '../models',  # If running from src/dashboard
+                '../../models',  # If running from deeper subdirectory
+                '/home/ongera/projects/SOC-assistant/models'  # Absolute path as fallback
+            ]
+            
+            models_dir = None
+            for path in possible_model_paths:
+                if os.path.exists(path) and os.path.isdir(path):
+                    # Check if it actually contains model files
+                    model_files = [f for f in os.listdir(path) if f.endswith('.pkl')]
+                    if model_files:
+                        models_dir = path
+                        break
+            
+            if not models_dir:
+                raise FileNotFoundError("Models directory not found in any expected location")
+            
+            logger.info(f"Loading models from: {models_dir}")
+            self.detector = SupervisedSOCDetector()
+            self.detector.load_models(models_dir)
+            
+            logger.info("Models loaded successfully")
+            
         except Exception as e:
-            logger.debug(f"Models not loaded: {e}")
+            logger.error(f"Error loading models: {e}")
             self.detector = None
     
     def _initialize_system_stats(self):
@@ -392,20 +419,27 @@ class SOCDashboardAPI:
         """Generate realistic network traffic data using model's feature template (network traffic only)"""
         np.random.seed(int(time.time()) % 1000)
         
-        # Initialize feature_columns with default value
-        feature_columns = []
+        # Get feature template from trained model if available
+        logger.debug(f"🔍 Detector status: detector={self.detector is not None}, has_method={hasattr(self.detector, 'get_feature_template') if self.detector else False}")
         
-        # Get feature template from the trained model
-        if self.detector:
+        if self.detector and hasattr(self.detector, 'get_feature_template'):
             try:
                 template = self.detector.get_feature_template()
                 feature_columns = template.get('feature_columns', [])
+                logger.info(f"🎯 Using model feature template with {len(feature_columns)} features")
+                logger.debug(f"📋 Model features: {feature_columns[:10]}...")
             except Exception as e:
-                pass  # Silently fallback to default features
+                logger.error(f"❌ Error getting feature template: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
                 feature_columns = []
-        
+        else:
+            logger.warning(f"⚠️ Detector not available or missing method")
+            feature_columns = []
+            
+        # If no feature template available, use fallback
         if not feature_columns:
-            # Fallback to standard network features
+            logger.info("📋 Using fallback feature template")
             feature_columns = [
                 'duration', 'protocol_type', 'service', 'flag', 'src_bytes', 'dst_bytes',
                 'land', 'wrong_fragment', 'urgent', 'hot', 'num_failed_logins', 'logged_in',
@@ -492,18 +526,22 @@ class SOCDashboardAPI:
                     attack_type = 'Normal'
             else:
                 # Fallback when no model is available - generate realistic anomaly scores
-                # Create some anomalies for demonstration (20% chance of anomaly)
-                if np.random.random() < 0.2:
-                    anomaly_score = float(np.random.uniform(0.6, 0.95))  # High anomaly score
+                # Adjust anomaly rate based on presentation mode
+                anomaly_rate = 0.15 if self.presentation_mode else 0.05  # Reduced from 20% to 5% (15% in presentation mode)
+                
+                if np.random.random() < anomaly_rate:
+                    # Generate anomalies with scores above threshold for clear detection
+                    anomaly_score = float(np.random.uniform(0.75, 0.95))  # Higher scores for clear anomalies
                     prediction = 1
-                    confidence = float(np.random.uniform(0.7, 0.9))
+                    confidence = float(np.random.uniform(0.8, 0.95))
                     # Generate realistic attack types based on anomaly score
                     attack_types = ['Brute Force', 'DDoS', 'Port Scan', 'SQL Injection', 'Web Attack', 'Network Scan', 'Data Exfiltration']
                     attack_type = np.random.choice(attack_types)
                 else:
-                    anomaly_score = float(np.random.uniform(0.05, 0.4))  # Low anomaly score
+                    # Normal traffic with scores well below threshold
+                    anomaly_score = float(np.random.uniform(0.05, 0.3))  # Reduced max from 0.4 to 0.3
                     prediction = 0
-                    confidence = float(np.random.uniform(0.6, 0.8))
+                    confidence = float(np.random.uniform(0.7, 0.9))
                     attack_type = 'Normal'
             
             # Add prediction results to the record
@@ -563,13 +601,83 @@ class SOCDashboardAPI:
     
     def generate_mock_data(self, batch_size=10):
         """Generate network traffic and process through trained models for real anomaly detection"""
-        # Step 1: Generate realistic network traffic data (simulation)
-        network_data = self.generate_realistic_network_data(batch_size)
+        # Step 1: Generate realistic network traffic data using model features
+        network_data = self._generate_model_compatible_data(batch_size)
         
         # Step 2: Process through trained models for real anomaly predictions
         processed_data = self.process_with_models(network_data)
         
         return processed_data
+    
+    def _generate_model_compatible_data(self, batch_size=10):
+        """Generate network data using the exact features the model expects"""
+        import random
+        import numpy as np
+        
+        # Get the model's expected features
+        logger.debug(f"🔍 Model check: detector={self.detector is not None}, has_method={hasattr(self.detector, 'get_feature_template') if self.detector else False}")
+        
+        if self.detector and hasattr(self.detector, 'get_feature_template'):
+            try:
+                template = self.detector.get_feature_template()
+                feature_columns = template.get('feature_columns', [])
+                logger.info(f"🎯 Generating data with model features: {len(feature_columns)} features")
+            except Exception as e:
+                logger.error(f"Error getting model features: {e}")
+                return self._generate_fallback_data(batch_size)
+        else:
+            logger.warning(f"⚠️ Model not available in data generation: detector={self.detector is not None}")
+            return self._generate_fallback_data(batch_size)
+        
+        if not feature_columns:
+            return self._generate_fallback_data(batch_size)
+        
+        # Generate data with the exact features the model expects
+        network_data = []
+        for i in range(batch_size):
+            record = {}
+            
+            # Generate each feature the model expects
+            for feature in feature_columns:
+                if feature == 'index':
+                    record[feature] = i
+                elif feature == 'duration':
+                    record[feature] = random.uniform(0.1, 10.0)
+                elif feature == 'protocol':
+                    record[feature] = random.choice(['TCP', 'UDP'])  # Use uppercase as expected by model
+                elif feature in ['src_ip', 'dst_ip']:
+                    record[feature] = f"10.0.{random.randint(1,3)}.{random.randint(1,10)}"
+                elif feature in ['src_port', 'dst_port']:
+                    record[feature] = random.randint(1024, 65535) if 'src' in feature else random.choice([80, 443, 22, 21, 53])
+                elif feature == 'packet_count':
+                    record[feature] = random.randint(1, 100)
+                elif feature == 'byte_count':
+                    record[feature] = random.randint(60, 10000)
+                elif feature in ['packets_per_sec', 'bytes_per_sec']:
+                    record[feature] = random.uniform(1, 1000)
+                elif 'packet_size' in feature:
+                    record[feature] = random.uniform(60, 1500)
+                elif 'inter_arrival_time' in feature:
+                    record[feature] = random.uniform(0.001, 1.0)
+                elif feature in ['syn_count', 'fin_count', 'rst_count', 'psh_count', 'ack_count', 'urg_count']:
+                    record[feature] = random.randint(0, 10)
+                elif 'ratio' in feature:
+                    record[feature] = random.uniform(0.0, 1.0)
+                elif feature == 'is_well_known_port':
+                    record[feature] = random.choice([0, 1])
+                else:
+                    # Default for unknown features
+                    record[feature] = random.uniform(0, 1)
+            
+            network_data.append(record)
+        
+        logger.info(f"✅ Generated {len(network_data)} records with model-compatible features")
+        return network_data
+    
+    def _generate_fallback_data(self, batch_size=10):
+        """Fallback data generation when model features aren't available"""
+        logger.info("📋 Using fallback data generation")
+        return self.generate_realistic_network_data(batch_size)
     
     def process_alerts(self, data_batch):
         """Process new data and generate alerts using MongoDB storage"""
@@ -638,9 +746,24 @@ class SOCDashboardAPI:
     
     def start_monitoring(self):
         """Start real-time monitoring simulation"""
+        # Ensure model is loaded before starting monitoring
+        if not self.detector:
+            logger.info("🔄 Loading models before starting monitoring...")
+            try:
+                self.load_models()
+                if not self.detector:
+                    logger.error("❌ Cannot start monitoring: Model loading failed")
+                    return False
+            except Exception as e:
+                logger.error(f"Failed to load models for monitoring: {e}")
+                return False
+        
         def monitor_loop():
+            logger.info("🔄 Monitoring thread started")
+            
             while self.is_monitoring:
                 try:
+                    # Skip model checking - if we got here, model should be loaded
                     # Generate and process new data
                     data_batch = self.generate_mock_data(batch_size=5)
                     new_alerts = self.process_alerts(data_batch)
@@ -657,14 +780,19 @@ class SOCDashboardAPI:
                     
                     time.sleep(2)  # Process every 2 seconds
                 except Exception as e:
-                    pass  # Continue monitoring despite errors
+                    logger.error(f"Monitoring error: {e}")
                     time.sleep(5)
+            
+            logger.info("🛑 Monitoring thread stopped")
         
         if not self.is_monitoring:
             self.is_monitoring = True
             monitoring_thread = threading.Thread(target=monitor_loop, daemon=True)
             monitoring_thread.start()
-            pass  # Monitoring started
+            logger.info("✅ Monitoring started successfully")
+            return True
+        
+        return True
     
     def stop_monitoring(self):
         """Stop real-time monitoring"""
@@ -739,16 +867,907 @@ class SOCDashboardAPI:
                 'severity_distribution': {'critical': 0, 'high': 0, 'medium': 0, 'low': 0},
                 'detection_rate': 0.0
             }
+    
+    # Mininet Integration Methods
+    def start_mininet_simulation(self, mode='normal', attack_type=None, duration=5):
+        """Start Mininet simulation by replaying existing PCAP files"""
+        if self.mininet_active:
+            return {'success': False, 'message': 'Mininet simulation already running'}
+        
+        try:
+            import os
+            import glob
+            
+            # Ensure topology is exported first
+            self._ensure_topology_exported()
+            
+            # Find existing PCAP files
+            pcap_dir = os.path.join(
+                os.path.dirname(__file__), 
+                '..', '..', 
+                'mininet_data_generation', 
+                'data_capture', 
+                'mininet'
+            )
+            
+            if mode == 'normal':
+                # Look for normal traffic PCAP in parent directory
+                normal_pcap_dir = os.path.join(
+                    os.path.dirname(__file__), 
+                    '..', '..', 
+                    'data_capture', 
+                    'pcaps'
+                )
+                pcap_files = glob.glob(os.path.join(normal_pcap_dir, 'normal_traffic_*.pcap'))
+                if not pcap_files:
+                    return {'success': False, 'message': 'No normal traffic PCAP files found. Run the Mininet pipeline first.'}
+                pcap_file = max(pcap_files, key=os.path.getctime)  # Get latest file
+                simulation_name = 'normal_traffic'
+                
+            elif mode == 'attack' and attack_type:
+                pcap_file = os.path.join(pcap_dir, f'{attack_type}.pcap')
+                if not os.path.exists(pcap_file):
+                    return {'success': False, 'message': f'PCAP file for {attack_type} not found. Run the Mininet pipeline first.'}
+                simulation_name = attack_type
+                
+            else:
+                return {'success': False, 'message': 'Invalid mode or missing attack type'}
+            
+            # Start simulation replay
+            logger.info(f"Starting Mininet simulation replay: {mode} ({attack_type if attack_type else 'N/A'})")
+            logger.info(f"Using PCAP file: {pcap_file}")
+            
+            self.mininet_active = True
+            self.mininet_mode = mode
+            self.current_simulation = simulation_name
+            self.simulation_start_time = datetime.now()
+            self.simulation_duration = duration
+            self.simulation_pcap_file = pcap_file
+            self.mininet_process = None  # No actual process for replay
+            
+            # Ensure monitoring is active for real-time updates
+            if not self.is_monitoring:
+                logger.info("🔄 Starting monitoring system for Mininet simulation")
+                success = self.start_monitoring()
+                if not success:
+                    logger.error("❌ Failed to start monitoring for Mininet simulation")
+                    # Continue anyway - Mininet simulation can still work
+            
+            # Start replay processing thread
+            replay_thread = threading.Thread(
+                target=self._replay_pcap_simulation,
+                args=(pcap_file, duration),
+                daemon=True
+            )
+            replay_thread.start()
+            
+            return {
+                'success': True,
+                'message': f'Mininet {mode} simulation started (replaying PCAP)',
+                'mode': mode,
+                'attack_type': attack_type,
+                'duration': duration,
+                'pcap_file': pcap_file,
+                'replay_mode': True
+            }
+            
+        except Exception as e:
+            logger.error(f"Error starting Mininet simulation: {e}")
+            return {'success': False, 'message': f'Failed to start simulation: {str(e)}'}
+    
+    def stop_mininet_simulation(self):
+        """Stop current Mininet simulation"""
+        if not self.mininet_active:
+            return {'success': False, 'message': 'No active Mininet simulation'}
+        
+        try:
+            logger.info("Stopping Mininet simulation")
+            
+            # For PCAP replay mode, just update the state
+            self.mininet_active = False
+            self.mininet_process = None
+            self.current_simulation = None
+            
+            return {'success': True, 'message': 'Mininet simulation stopped'}
+            
+        except Exception as e:
+            logger.error(f"Error stopping Mininet simulation: {e}")
+            return {'success': False, 'message': f'Failed to stop simulation: {str(e)}'}
+    
+    def _ensure_topology_exported(self):
+        """Ensure Mininet topology is exported"""
+        try:
+            import os
+            import sys
+            
+            # Check if topology file exists
+            topology_file = os.path.join(
+                os.path.dirname(__file__),
+                '../../mininet_data_generation/data_capture/mininet_topology.json'
+            )
+            
+            if not os.path.exists(topology_file):
+                logger.info("Exporting Mininet topology...")
+                
+                # Add topology directory to path
+                topology_dir = os.path.join(
+                    os.path.dirname(__file__),
+                    '../../mininet_data_generation/topology'
+                )
+                sys.path.append(topology_dir)
+                
+                from topology_exporter import TopologyExporter
+                
+                exporter = TopologyExporter()
+                exporter.export_topology()
+                logger.info("Topology exported successfully")
+            
+        except Exception as e:
+            logger.warning(f"Could not export topology: {e}")
+    
+    def _replay_pcap_simulation(self, pcap_file, duration):
+        """Replay PCAP file simulation with immediate alert generation"""
+        try:
+            import time
+            
+            logger.info(f"Starting PCAP replay simulation for {duration} seconds")
+            
+            # Process PCAP file and generate alerts immediately
+            self._process_pcap_for_alerts(pcap_file)
+            
+            # For PCAP replay, we don't need to wait - alerts are generated instantly
+            # Just wait a short time to let the frontend show progress, then complete
+            time.sleep(2)  # Just 2 seconds for visual feedback
+            
+            # Simulation completed
+            if self.mininet_active:  # Only if not stopped manually
+                self.mininet_active = False
+                self.mininet_process = None
+                
+                logger.info("PCAP replay simulation completed")
+                
+                # Emit completion event and trigger dashboard refresh
+                socketio.emit('mininet_simulation_completed', {
+                    'mode': self.mininet_mode,
+                    'simulation': self.current_simulation,
+                    'duration': duration,
+                    'pcap_file': pcap_file
+                })
+                
+                # Also emit a stats update to refresh dashboard
+                updated_stats = self.get_system_stats()
+                socketio.emit('stats_update', updated_stats)
+            
+        except Exception as e:
+            logger.error(f"Error in PCAP replay simulation: {e}")
+            self.mininet_active = False
+            self.mininet_process = None
+    
+    def _process_pcap_for_alerts(self, pcap_file):
+        """Process actual PCAP file using ML model to generate realistic alerts"""
+        try:
+            import os
+            import random
+            from datetime import datetime, timedelta
+            
+            logger.info(f"🔬 Processing actual PCAP file: {pcap_file}")
+            
+            # Check if PCAP file exists
+            if not os.path.exists(pcap_file):
+                logger.warning(f"PCAP file not found: {pcap_file}, trying normal traffic PCAP")
+                pcap_file = self._get_fallback_pcap_file()
+            
+            # Extract features from actual PCAP file
+            network_data = self._extract_features_from_pcap(pcap_file)
+            
+            if not network_data:
+                logger.warning(f"No IPv4 data in PCAP: {pcap_file}, trying normal traffic PCAP")
+                pcap_file = self._get_fallback_pcap_file()
+                network_data = self._extract_features_from_pcap(pcap_file)
+                
+            if not network_data:
+                logger.error("No usable PCAP files found, using synthetic data as last resort")
+                return self._generate_synthetic_attack_data()
+            
+            logger.info(f"📊 Extracted {len(network_data)} records from PCAP file: {os.path.basename(pcap_file)}")
+            
+            # If this is an attack simulation but we're using normal traffic PCAP,
+            # apply attack patterns to make it realistic
+            if 'attack' in self.current_simulation or self.current_simulation != 'normal_traffic':
+                if 'normal_traffic' in pcap_file:
+                    logger.info(f"🎯 Applying {self.current_simulation} patterns to normal traffic data")
+                    network_data = self._inject_attack_patterns(network_data, self.current_simulation)
+            
+            # Process through ML model pipeline
+            processed_data = self.process_with_models(network_data)
+            
+            # Convert model predictions to alerts
+            new_alerts = []
+            for record in processed_data:
+                # Only create alerts for anomalies detected by the model
+                if record.get('prediction', 0) == 1 and record.get('anomaly_score', 0) >= self.threshold:
+                    
+                    # Create alert data from model prediction
+                    alert_data = {
+                        'timestamp': datetime.now() - timedelta(seconds=random.randint(0, 60)),
+                        'source_ip': record.get('source_ip', f"10.0.{random.randint(1,3)}.{random.randint(1,10)}"),
+                        'destination_ip': record.get('destination_ip', f"10.0.{random.randint(1,3)}.{random.randint(1,10)}"),
+                        'source_port': int(record.get('source_port', random.randint(1024, 65535))),
+                        'destination_port': int(record.get('destination_port', random.choice([80, 443, 22, 21, 53, 3306]))),
+                        'protocol': record.get('protocol', 'tcp').lower(),
+                        'attack_type': record.get('attack_type', 'anomaly_detected'),
+                        'severity': self._calculate_severity_from_score(record.get('anomaly_score', 0.5)),
+                        'anomaly_score': float(record.get('anomaly_score', 0.5)),
+                        'status': 'new',
+                        'created_by': 'mininet_ml_model',
+                        'tags': ['mininet', 'ml_detected', self.current_simulation],
+                        'confidence': float(record.get('confidence', 0.5)),
+                        'simulation_source': True,
+                        'description': f"ML model detected anomaly in Mininet simulation: {self.current_simulation}"
+                    }
+                
+                # Store alert in database using create_alert method
+                try:
+                    success, message, db_alert_id = self.dal.create_alert(alert_data)
+                    if success:
+                        # Add the generated alert_id to our data for broadcasting
+                        alert_data['alert_id'] = db_alert_id
+                        new_alerts.append(alert_data)
+                        logger.info(f"✅ Stored Mininet alert: {db_alert_id} - {alert_data['attack_type']} ({alert_data['severity']})")
+                    else:
+                        logger.error(f"❌ Failed to create alert: {message}")
+                except Exception as e:
+                    logger.error(f"❌ Exception storing alert: {e}")
+            
+            logger.info(f"🎯 ML Model Results: Generated {len(new_alerts)} alerts from {len(processed_data)} network records")
+            logger.info(f"📊 Alert Detection Rate: {len(new_alerts)}/{len(processed_data)} ({len(new_alerts)/len(processed_data)*100:.1f}%)")
+            
+            # Log attack type distribution
+            if new_alerts:
+                attack_types = {}
+                for alert in new_alerts:
+                    attack_type = alert.get('attack_type', 'unknown')
+                    attack_types[attack_type] = attack_types.get(attack_type, 0) + 1
+                logger.info(f"🔍 Attack Types Detected: {dict(attack_types)}")
+            else:
+                logger.info("✅ No anomalies detected by ML model - normal traffic pattern")
+            
+            # Broadcast new alerts to all connected clients via WebSocket
+            if new_alerts:
+                try:
+                    # Convert datetime objects to strings for JSON serialization
+                    alerts_for_broadcast = []
+                    for alert in new_alerts:
+                        alert_copy = alert.copy()
+                        if isinstance(alert_copy['timestamp'], datetime):
+                            alert_copy['timestamp'] = alert_copy['timestamp'].isoformat()
+                        alerts_for_broadcast.append(alert_copy)
+                    
+                    # Get updated stats
+                    updated_stats = self.get_system_stats()
+                    
+                    # Emit to all connected clients using the same event as the monitoring system
+                    socketio.emit('new_alerts', {
+                        'alerts': alerts_for_broadcast,
+                        'stats': updated_stats,
+                        'source': 'mininet_simulation'
+                    })
+                    
+                    # Also emit alerts_update for compatibility
+                    socketio.emit('alerts_update', {
+                        'alerts': alerts_for_broadcast,
+                        'stats': updated_stats
+                    })
+                    
+                    logger.info(f"✅ Broadcasted {len(new_alerts)} new alerts to dashboard via WebSocket")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error broadcasting alerts: {e}")
+            else:
+                logger.warning("⚠️ No new alerts to broadcast - check alert generation")
+            
+        except Exception as e:
+            logger.error(f"Error processing PCAP for alerts: {e}")
+    
+    def _get_fallback_pcap_file(self):
+        """Get a working normal traffic PCAP file as fallback"""
+        import os
+        import glob
+        
+        # Look for normal traffic PCAP files
+        normal_pcap_dirs = [
+            '/home/ongera/projects/SOC-assistant/data_capture/pcaps/',
+            '/home/ongera/projects/SOC-assistant/mininet_data_generation/data_capture/'
+        ]
+        
+        for pcap_dir in normal_pcap_dirs:
+            if os.path.exists(pcap_dir):
+                # Look for normal traffic files
+                patterns = ['normal_traffic_*.pcap', '*.pcap']
+                for pattern in patterns:
+                    pcap_files = glob.glob(os.path.join(pcap_dir, pattern))
+                    if pcap_files:
+                        # Use the largest file (likely has more data)
+                        largest_file = max(pcap_files, key=os.path.getsize)
+                        logger.info(f"🔄 Using fallback PCAP: {largest_file}")
+                        return largest_file
+        
+        logger.error("No fallback PCAP files found")
+        return None
+    
+    def _extract_features_from_pcap(self, pcap_file):
+        """Extract network features from PCAP file using the SAME method used for training"""
+        try:
+            from scapy.all import rdpcap, IP, TCP, UDP, ICMP
+            from collections import defaultdict
+            import numpy as np
+            
+            logger.info(f"🔍 Extracting features from PCAP using training method: {pcap_file}")
+            
+            # Read PCAP file using scapy (same as training)
+            try:
+                packets = rdpcap(pcap_file)
+            except Exception as e:
+                logger.error(f"Error reading PCAP file: {e}")
+                return None
+            
+            # Group packets by flow (same as training pipeline)
+            flows = defaultdict(list)
+            ipv4_count = 0
+            ipv6_count = 0
+            other_count = 0
+            
+            for pkt in packets:
+                if IP in pkt:
+                    ipv4_count += 1
+                    key = self._get_flow_key(pkt)
+                    if key:
+                        flows[key].append(pkt)
+                elif 'IPv6' in str(pkt):
+                    ipv6_count += 1
+                else:
+                    other_count += 1
+            
+            logger.info(f"📊 Packet analysis: IPv4={ipv4_count}, IPv6={ipv6_count}, Other={other_count}")
+            
+            # Extract features for each flow (same as training)
+            network_data = []
+            for flow_key, flow_packets in flows.items():
+                feature = self._extract_flow_features(flow_key, flow_packets)
+                if feature:
+                    network_data.append(feature)
+            
+            logger.info(f"✅ Extracted {len(network_data)} flow records from PCAP")
+            return network_data
+                
+        except ImportError:
+            logger.error("scapy not installed - install with: pip install scapy")
+            return None
+        except Exception as e:
+            logger.error(f"Error extracting features from PCAP: {e}")
+            return None
+    
+    def _get_flow_key(self, pkt):
+        """Get flow identifier from packet (same as training)"""
+        from scapy.all import IP, TCP, UDP, ICMP
+        
+        if IP not in pkt:
+            return None
+        
+        src_ip = pkt[IP].src
+        dst_ip = pkt[IP].dst
+        
+        if TCP in pkt:
+            protocol = 'TCP'
+            src_port = pkt[TCP].sport
+            dst_port = pkt[TCP].dport
+        elif UDP in pkt:
+            protocol = 'UDP'
+            src_port = pkt[UDP].sport
+            dst_port = pkt[UDP].dport
+        elif ICMP in pkt:
+            protocol = 'ICMP'
+            src_port = 0
+            dst_port = 0
+        else:
+            return None
+        
+        return (src_ip, dst_ip, src_port, dst_port, protocol)
+    
+    def _extract_flow_features(self, flow_key, packets):
+        """Extract features from flow packets (EXACT same as training)"""
+        from scapy.all import TCP
+        import numpy as np
+        
+        src_ip, dst_ip, src_port, dst_port, protocol = flow_key
+        
+        # Basic statistics
+        packet_count = len(packets)
+        if packet_count == 0:
+            return None
+        
+        # Timing
+        timestamps = [float(pkt.time) for pkt in packets]
+        duration = max(timestamps) - min(timestamps) if len(timestamps) > 1 else 0.1
+        
+        # Packet sizes
+        packet_sizes = [len(pkt) for pkt in packets]
+        byte_count = sum(packet_sizes)
+        
+        # TCP flags
+        syn_count = sum(1 for pkt in packets if TCP in pkt and pkt[TCP].flags & 0x02)
+        fin_count = sum(1 for pkt in packets if TCP in pkt and pkt[TCP].flags & 0x01)
+        rst_count = sum(1 for pkt in packets if TCP in pkt and pkt[TCP].flags & 0x04)
+        psh_count = sum(1 for pkt in packets if TCP in pkt and pkt[TCP].flags & 0x08)
+        ack_count = sum(1 for pkt in packets if TCP in pkt and pkt[TCP].flags & 0x10)
+        urg_count = sum(1 for pkt in packets if TCP in pkt and pkt[TCP].flags & 0x20)
+        
+        # Derived features
+        packets_per_sec = packet_count / duration if duration > 0 else 0
+        bytes_per_sec = byte_count / duration if duration > 0 else 0
+        mean_packet_size = np.mean(packet_sizes) if packet_sizes else 0
+        std_packet_size = np.std(packet_sizes) if len(packet_sizes) > 1 else 0
+        min_packet_size = min(packet_sizes) if packet_sizes else 0
+        max_packet_size = max(packet_sizes) if packet_sizes else 0
+        
+        # Inter-arrival times
+        if len(timestamps) > 1:
+            inter_arrival_times = np.diff(timestamps)
+            mean_iat = np.mean(inter_arrival_times)
+            std_iat = np.std(inter_arrival_times)
+        else:
+            mean_iat = 0
+            std_iat = 0
+        
+        # Flag ratios
+        syn_ratio = syn_count / packet_count if packet_count > 0 else 0
+        fin_ratio = fin_count / packet_count if packet_count > 0 else 0
+        rst_ratio = rst_count / packet_count if packet_count > 0 else 0
+        
+        # Port classification
+        is_well_known_port = 1 if dst_port < 1024 else 0
+        
+        # Return the EXACT same features as training (including index)
+        return {
+            'index': 0,  # Add missing index feature
+            'duration': duration,
+            'protocol': protocol,
+            'src_ip': src_ip,
+            'dst_ip': dst_ip,
+            'src_port': src_port,
+            'dst_port': dst_port,
+            'packet_count': packet_count,
+            'byte_count': byte_count,
+            'packets_per_sec': packets_per_sec,
+            'bytes_per_sec': bytes_per_sec,
+            'mean_packet_size': mean_packet_size,
+            'std_packet_size': std_packet_size,
+            'min_packet_size': min_packet_size,
+            'max_packet_size': max_packet_size,
+            'mean_inter_arrival_time': mean_iat,
+            'std_inter_arrival_time': std_iat,
+            'syn_count': syn_count,
+            'fin_count': fin_count,
+            'rst_count': rst_count,
+            'psh_count': psh_count,
+            'ack_count': ack_count,
+            'urg_count': urg_count,
+            'syn_ratio': syn_ratio,
+            'fin_ratio': fin_ratio,
+            'rst_ratio': rst_ratio,
+            'is_well_known_port': is_well_known_port
+        }
+    
+    def _convert_to_model_features(self, raw_record):
+        """Convert raw PCAP fields to model-expected features"""
+        try:
+            import random
+            
+            # Get the model's expected features
+            if self.detector and hasattr(self.detector, 'get_feature_template'):
+                template = self.detector.get_feature_template()
+                expected_features = template.get('feature_columns', [])
+            else:
+                return None
+            
+            # Create record with model-expected features
+            record = {}
+            
+            # Map raw PCAP fields to model features
+            for feature in expected_features:
+                if feature == 'duration':
+                    record[feature] = float(raw_record.get('frame.time_relative', 0))
+                elif feature == 'protocol_type':
+                    proto = raw_record.get('ip.proto', '6')
+                    record[feature] = 'tcp' if proto == '6' else 'udp' if proto == '17' else 'icmp'
+                elif feature == 'service':
+                    port = raw_record.get('tcp.dstport', '80')
+                    # Map common ports to services
+                    port_map = {'80': 'http', '443': 'https', '22': 'ssh', '21': 'ftp', '53': 'dns', '25': 'smtp'}
+                    record[feature] = port_map.get(port, 'other')
+                elif feature == 'flag':
+                    flags = raw_record.get('tcp.flags', '0x18')
+                    # Map TCP flags to connection states
+                    record[feature] = 'SF' if '0x18' in flags else 'S0' if '0x02' in flags else 'REJ'
+                elif feature == 'src_bytes':
+                    record[feature] = int(raw_record.get('frame.len', 60))
+                elif feature == 'dst_bytes':
+                    record[feature] = int(raw_record.get('tcp.len', 0))
+                elif feature in ['land', 'wrong_fragment', 'urgent', 'logged_in', 'root_shell', 'su_attempted', 'is_host_login', 'is_guest_login']:
+                    # Binary features - mostly 0 for normal traffic
+                    record[feature] = 0
+                elif 'count' in feature:
+                    # Connection counts - use reasonable defaults
+                    record[feature] = random.randint(1, 10)
+                elif 'rate' in feature or 'error' in feature:
+                    # Rate features - mostly low for normal traffic
+                    record[feature] = random.uniform(0.0, 0.1)
+                else:
+                    # Default numeric features
+                    record[feature] = random.uniform(0, 1)
+            
+            return record
+            
+        except Exception as e:
+            logger.error(f"Error converting PCAP record to model features: {e}")
+            return None
+    
+    def _generate_synthetic_attack_data(self):
+        """Generate synthetic attack data with realistic attack patterns"""
+        import random
+        import numpy as np
+        from datetime import datetime, timedelta
+        
+        logger.info(f"🎯 Generating synthetic attack data for: {self.current_simulation}")
+        
+        # Generate realistic attack flows based on attack type
+        if 'normal' in self.current_simulation:
+            num_flows = random.randint(10, 20)
+            attack_ratio = 0.05  # 5% anomalies for normal traffic
+        else:
+            num_flows = random.randint(30, 60)
+            attack_ratio = 0.7   # 70% anomalies for attack traffic
+        
+        # Generate network flows with attack characteristics
+        network_data = []
+        for i in range(num_flows):
+            # Create base flow
+            flow = self._create_synthetic_flow(i, is_attack=random.random() < attack_ratio)
+            network_data.append(flow)
+        
+        logger.info(f"📊 Generated {len(network_data)} synthetic flows ({attack_ratio*100:.0f}% attack patterns)")
+        
+        # Process through ML model pipeline
+        processed_data = self.process_with_models(network_data)
+        
+        # Convert model predictions to alerts
+        new_alerts = []
+        for record in processed_data:
+            # Only create alerts for anomalies detected by the model
+            if record.get('prediction', 0) == 1 and record.get('anomaly_score', 0) >= self.threshold:
+                
+                # Create alert data from model prediction
+                alert_data = {
+                    'timestamp': datetime.now() - timedelta(seconds=random.randint(0, 60)),
+                    'source_ip': record.get('src_ip', f"10.0.{random.randint(1,3)}.{random.randint(1,10)}"),
+                    'destination_ip': record.get('dst_ip', f"10.0.{random.randint(1,3)}.{random.randint(1,10)}"),
+                    'source_port': int(record.get('src_port', random.randint(1024, 65535))),
+                    'destination_port': int(record.get('dst_port', random.choice([80, 443, 22, 21, 53, 3306]))),
+                    'protocol': record.get('protocol', 'tcp').lower(),
+                    'attack_type': record.get('attack_type', 'anomaly_detected'),
+                    'severity': self._calculate_severity_from_score(record.get('anomaly_score', 0.5)),
+                    'anomaly_score': float(record.get('anomaly_score', 0.5)),
+                    'status': 'new',
+                    'created_by': 'mininet_ml_model',
+                    'tags': ['mininet', 'ml_detected', self.current_simulation],
+                    'confidence': float(record.get('confidence', 0.5)),
+                    'simulation_source': True,
+                    'description': f"ML model detected anomaly in synthetic {self.current_simulation} data"
+                }
+                
+                # Store alert in database using create_alert method
+                try:
+                    success, message, db_alert_id = self.dal.create_alert(alert_data)
+                    if success:
+                        # Add the generated alert_id to our data for broadcasting
+                        alert_data['alert_id'] = db_alert_id
+                        new_alerts.append(alert_data)
+                        logger.info(f"✅ Stored synthetic alert: {db_alert_id} - {alert_data['attack_type']} ({alert_data['severity']})")
+                    else:
+                        logger.error(f"❌ Failed to create alert: {message}")
+                except Exception as e:
+                    logger.error(f"❌ Exception storing alert: {e}")
+        
+        logger.info(f"🎯 ML Model Results: Generated {len(new_alerts)} alerts from {len(processed_data)} synthetic records")
+        logger.info(f"📊 Alert Detection Rate: {len(new_alerts)}/{len(processed_data)} ({len(new_alerts)/len(processed_data)*100:.1f}%)")
+        
+        # Broadcast new alerts to all connected clients via WebSocket
+        if new_alerts:
+            try:
+                # Convert datetime objects to strings for JSON serialization
+                alerts_for_broadcast = []
+                for alert in new_alerts:
+                    alert_copy = alert.copy()
+                    if isinstance(alert_copy['timestamp'], datetime):
+                        alert_copy['timestamp'] = alert_copy['timestamp'].isoformat()
+                    alerts_for_broadcast.append(alert_copy)
+                
+                # Get updated stats
+                updated_stats = self.get_system_stats()
+                
+                # Emit to all connected clients using the same event as the monitoring system
+                socketio.emit('new_alerts', {
+                    'alerts': alerts_for_broadcast,
+                    'stats': updated_stats,
+                    'source': 'mininet_simulation'
+                })
+                
+                # Also emit alerts_update for compatibility
+                socketio.emit('alerts_update', {
+                    'alerts': alerts_for_broadcast,
+                    'stats': updated_stats
+                })
+                
+                logger.info(f"✅ Broadcasted {len(new_alerts)} synthetic alerts to dashboard via WebSocket")
+                
+            except Exception as e:
+                logger.error(f"❌ Error broadcasting alerts: {e}")
+        else:
+            logger.info("✅ No anomalies detected by ML model - normal traffic pattern")
+    
+    def _create_synthetic_flow(self, index, is_attack=False):
+        """Create a synthetic network flow with realistic characteristics"""
+        import random
+        import numpy as np
+        
+        base_flow = {
+            'index': index,
+            'duration': random.uniform(0.1, 10.0),
+            'protocol': random.choice(['TCP', 'UDP']),  # Use uppercase to match model training
+            'src_ip': f"10.0.{random.randint(1,3)}.{random.randint(1,10)}",
+            'dst_ip': f"10.0.{random.randint(1,3)}.{random.randint(1,10)}",
+            'src_port': random.randint(1024, 65535),
+            'dst_port': random.choice([80, 443, 22, 21, 53, 3306, 8080]),
+            'packet_count': random.randint(1, 100),
+            'byte_count': random.randint(60, 10000),
+            'is_well_known_port': 1 if random.randint(1, 65535) < 1024 else 0
+        }
+        
+        # Calculate derived features
+        base_flow['packets_per_sec'] = base_flow['packet_count'] / base_flow['duration']
+        base_flow['bytes_per_sec'] = base_flow['byte_count'] / base_flow['duration']
+        base_flow['mean_packet_size'] = base_flow['byte_count'] / base_flow['packet_count']
+        base_flow['std_packet_size'] = random.uniform(0, base_flow['mean_packet_size'] * 0.3)
+        base_flow['min_packet_size'] = max(60, base_flow['mean_packet_size'] - base_flow['std_packet_size'])
+        base_flow['max_packet_size'] = base_flow['mean_packet_size'] + base_flow['std_packet_size']
+        base_flow['mean_inter_arrival_time'] = base_flow['duration'] / base_flow['packet_count']
+        base_flow['std_inter_arrival_time'] = random.uniform(0, base_flow['mean_inter_arrival_time'])
+        
+        # TCP flags
+        base_flow['syn_count'] = random.randint(0, 5)
+        base_flow['fin_count'] = random.randint(0, 3)
+        base_flow['rst_count'] = random.randint(0, 2)
+        base_flow['psh_count'] = random.randint(0, base_flow['packet_count'])
+        base_flow['ack_count'] = random.randint(0, base_flow['packet_count'])
+        base_flow['urg_count'] = random.randint(0, 1)
+        
+        # Flag ratios
+        base_flow['syn_ratio'] = base_flow['syn_count'] / base_flow['packet_count']
+        base_flow['fin_ratio'] = base_flow['fin_count'] / base_flow['packet_count']
+        base_flow['rst_ratio'] = base_flow['rst_count'] / base_flow['packet_count']
+        
+        # If this should be an attack, modify characteristics
+        if is_attack:
+            if 'syn_flood' in self.current_simulation:
+                base_flow['syn_count'] = random.randint(50, 200)
+                base_flow['syn_ratio'] = 0.8 + random.uniform(0, 0.2)
+                base_flow['packet_count'] = random.randint(100, 1000)
+                base_flow['byte_count'] = random.randint(6000, 60000)
+                base_flow['duration'] = random.uniform(0.01, 0.5)
+            elif 'port_scan' in self.current_simulation:
+                base_flow['packet_count'] = random.randint(20, 100)
+                base_flow['byte_count'] = random.randint(1200, 6000)
+                base_flow['duration'] = random.uniform(0.01, 0.1)
+                base_flow['dst_port'] = random.randint(1, 65535)
+            elif 'udp_flood' in self.current_simulation:
+                base_flow['protocol'] = 'UDP'  # Use uppercase to match model
+                base_flow['packet_count'] = random.randint(200, 2000)
+                base_flow['byte_count'] = random.randint(20000, 200000)
+                base_flow['duration'] = random.uniform(0.1, 2.0)
+            elif 'http_flood' in self.current_simulation:
+                base_flow['protocol'] = 'TCP'  # Use uppercase to match model
+                base_flow['dst_port'] = random.choice([80, 443, 8080])
+                base_flow['packet_count'] = random.randint(50, 500)
+                base_flow['byte_count'] = random.randint(5000, 50000)
+                base_flow['duration'] = random.uniform(0.1, 5.0)
+            
+            # Recalculate derived features for attacks
+            base_flow['packets_per_sec'] = base_flow['packet_count'] / base_flow['duration']
+            base_flow['bytes_per_sec'] = base_flow['byte_count'] / base_flow['duration']
+            base_flow['mean_packet_size'] = base_flow['byte_count'] / base_flow['packet_count']
+        
+        return base_flow
+    
+    def _inject_attack_patterns(self, network_data, attack_type):
+        """Inject attack-specific patterns into network data for realistic model detection"""
+        try:
+            import random
+            import numpy as np
+            
+            logger.info(f"🎯 Injecting {attack_type} patterns into network data")
+            
+            # Modify a portion of the data to exhibit attack characteristics
+            attack_ratio = 0.3  # 30% of data will have attack patterns
+            num_attack_records = int(len(network_data) * attack_ratio)
+            
+            # Randomly select records to modify
+            attack_indices = random.sample(range(len(network_data)), num_attack_records)
+            
+            for idx in attack_indices:
+                record = network_data[idx]
+                
+                if attack_type == 'syn_flood':
+                    # SYN flood characteristics using model features
+                    if 'src_bytes' in record:
+                        record['src_bytes'] = random.randint(50000, 200000)  # High bytes sent
+                    if 'dst_bytes' in record:
+                        record['dst_bytes'] = random.randint(0, 1000)  # Low bytes received
+                    if 'duration' in record:
+                        record['duration'] = random.uniform(0.001, 0.1)  # Very short duration
+                    if 'count' in record:
+                        record['count'] = random.randint(100, 1000)  # High connection count
+                    if 'flag' in record:
+                        record['flag'] = 'S0'  # SYN flood flag
+                    if 'protocol_type' in record:
+                        record['protocol_type'] = 'tcp'
+                    if 'service' in record:
+                        record['service'] = 'http'
+                    
+                elif attack_type == 'port_scan':
+                    # Port scan characteristics using model features
+                    if 'src_bytes' in record:
+                        record['src_bytes'] = random.randint(100, 1000)  # Low bytes per connection
+                    if 'dst_bytes' in record:
+                        record['dst_bytes'] = random.randint(0, 100)  # Very low response
+                    if 'duration' in record:
+                        record['duration'] = random.uniform(0.001, 0.05)  # Very short connections
+                    if 'count' in record:
+                        record['count'] = random.randint(50, 500)  # Many connections
+                    if 'srv_count' in record:
+                        record['srv_count'] = random.randint(1, 10)  # Few services per connection
+                    if 'flag' in record:
+                        record['flag'] = random.choice(['REJ', 'S0', 'RSTR'])  # Rejected connections
+                    if 'protocol_type' in record:
+                        record['protocol_type'] = 'tcp'
+                    
+                elif attack_type == 'udp_flood':
+                    # UDP flood characteristics using model features
+                    if 'src_bytes' in record:
+                        record['src_bytes'] = random.randint(100000, 500000)  # Very high bytes
+                    if 'dst_bytes' in record:
+                        record['dst_bytes'] = random.randint(0, 1000)  # Low response
+                    if 'duration' in record:
+                        record['duration'] = random.uniform(0.1, 1.0)  # Short bursts
+                    if 'count' in record:
+                        record['count'] = random.randint(200, 2000)  # High packet count
+                    if 'protocol_type' in record:
+                        record['protocol_type'] = 'udp'
+                    if 'service' in record:
+                        record['service'] = 'dns'
+                    
+                elif attack_type == 'http_flood':
+                    # HTTP flood characteristics using model features
+                    if 'src_bytes' in record:
+                        record['src_bytes'] = random.randint(20000, 100000)  # HTTP request size
+                    if 'dst_bytes' in record:
+                        record['dst_bytes'] = random.randint(5000, 50000)  # HTTP response size
+                    if 'duration' in record:
+                        record['duration'] = random.uniform(0.1, 2.0)  # HTTP session duration
+                    if 'count' in record:
+                        record['count'] = random.randint(100, 1000)  # High request rate
+                    if 'protocol_type' in record:
+                        record['protocol_type'] = 'tcp'
+                    if 'service' in record:
+                        record['service'] = 'http'
+                    if 'flag' in record:
+                        record['flag'] = 'SF'  # Successful connections
+                
+                # Add some noise to make it more realistic
+                for key in ['src_bytes', 'dst_bytes', 'count', 'srv_count']:
+                    if key in record:
+                        record[key] = int(record[key] * random.uniform(0.8, 1.2))
+            
+            logger.info(f"✅ Injected attack patterns into {num_attack_records}/{len(network_data)} records")
+            return network_data
+            
+        except Exception as e:
+            logger.error(f"Error injecting attack patterns: {e}")
+            return network_data
+    
+    def _monitor_mininet_process(self, duration):
+        """Monitor Mininet process and handle completion"""
+        try:
+            # Wait for process to complete or timeout
+            self.mininet_process.wait(timeout=duration + 30)
+            
+            # Process completed naturally
+            self.mininet_active = False
+            self.mininet_process = None
+            
+            logger.info("Mininet simulation completed")
+            
+            # Emit completion event via WebSocket
+            socketio.emit('mininet_simulation_completed', {
+                'mode': self.mininet_mode,
+                'simulation': self.current_simulation,
+                'duration': duration
+            })
+            
+        except subprocess.TimeoutExpired:
+            # Timeout reached, force stop
+            logger.warning("Mininet simulation timed out, forcing stop")
+            self.stop_mininet_simulation()
+        except Exception as e:
+            logger.error(f"Error monitoring Mininet process: {e}")
+            self.mininet_active = False
+            self.mininet_process = None
+    
+    def get_mininet_status(self):
+        """Get current Mininet simulation status"""
+        if not self.mininet_active:
+            return {
+                'active': False,
+                'mode': None,
+                'simulation': None,
+                'duration': 0,
+                'elapsed': 0
+            }
+        
+        elapsed = 0
+        if self.simulation_start_time:
+            elapsed = (datetime.now() - self.simulation_start_time).total_seconds()
+        
+        return {
+            'active': True,
+            'mode': self.mininet_mode,
+            'simulation': self.current_simulation,
+            'duration': self.simulation_duration,
+            'elapsed': int(elapsed),
+            'remaining': max(0, self.simulation_duration - int(elapsed)),
+            'pid': self.mininet_process.pid if self.mininet_process else None
+        }
+    
+    def switch_network_mode(self, target_mode, attack_type=None):
+        """Switch between normal and attack network modes"""
+        try:
+            # Stop current simulation if running
+            if self.mininet_active:
+                stop_result = self.stop_mininet_simulation()
+                if not stop_result['success']:
+                    return stop_result
+                
+                # Wait a moment for cleanup
+                time.sleep(2)
+            
+            # Start new simulation
+            if target_mode == 'normal':
+                return self.start_mininet_simulation(mode='normal', duration=300)  # 5 minutes
+            elif target_mode == 'attack':
+                if not attack_type:
+                    attack_type = 'syn_flood'  # Default attack
+                return self.start_mininet_simulation(mode='attack', attack_type=attack_type, duration=120)  # 2 minutes
+            else:
+                return {'success': False, 'message': 'Invalid network mode'}
+                
+        except Exception as e:
+            logger.error(f"Error switching network mode: {e}")
+            return {'success': False, 'message': f'Failed to switch mode: {str(e)}'}
 
-# Initialize dashboard API
-dashboard_api = SOCDashboardAPI()
+# Initialize dashboard API (model loading will happen in main())
+dashboard_api = None
 
-# Initialize CSV processor with shared detector for consistent predictions
-csv_processor = CSVProcessor(
-    detector=dashboard_api.detector,  # Share the same detector instance
-    upload_dir="src/dashboard/data/uploads",
-    reports_dir="src/dashboard/data/reports"
-)
+# CSV processor will be initialized in main() after dashboard_api is created
+csv_processor = None
 
 # Authentication endpoints
 @app.route('/api/auth/check-mfa', methods=['POST'])
@@ -3847,8 +4866,220 @@ def handle_request_alerts(data=None):
         print(f"Error getting alerts for WebSocket: {e}")
         emit('error', {'message': 'Failed to get alerts'})
 
+# Mininet Simulation API Endpoints
+@app.route('/api/mininet/start', methods=['POST'])
+@token_required
+@admin_required
+def start_mininet_simulation():
+    """Start Mininet network simulation"""
+    try:
+        data = request.get_json()
+        mode = data.get('mode', 'normal')  # 'normal' or 'attack'
+        attack_type = data.get('attack_type')
+        duration = data.get('duration', 120)
+        
+        result = dashboard_api.start_mininet_simulation(
+            mode=mode,
+            attack_type=attack_type,
+            duration=duration
+        )
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error starting Mininet simulation: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/mininet/stop', methods=['POST'])
+@token_required
+@admin_required
+def stop_mininet_simulation():
+    """Stop current Mininet simulation"""
+    try:
+        result = dashboard_api.stop_mininet_simulation()
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error stopping Mininet simulation: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/mininet/status')
+@token_required
+@analyst_or_admin_required
+def get_mininet_status():
+    """Get current Mininet simulation status"""
+    try:
+        status = dashboard_api.get_mininet_status()
+        return jsonify(status)
+        
+    except Exception as e:
+        logger.error(f"Error getting Mininet status: {e}")
+        return jsonify({'error': 'Failed to get Mininet status'}), 500
+
+@app.route('/api/mininet/switch-mode', methods=['POST'])
+@token_required
+@admin_required
+def switch_network_mode():
+    """Switch between normal and attack network modes"""
+    try:
+        data = request.get_json()
+        target_mode = data.get('mode')  # 'normal' or 'attack'
+        attack_type = data.get('attack_type')
+        
+        if not target_mode:
+            return jsonify({'success': False, 'message': 'Mode is required'}), 400
+        
+        result = dashboard_api.switch_network_mode(
+            target_mode=target_mode,
+            attack_type=attack_type
+        )
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error switching network mode: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/mininet/attacks')
+@token_required
+@analyst_or_admin_required
+def get_available_attacks():
+    """Get list of available attack types"""
+    try:
+        attacks = dashboard_api.available_attacks
+        return jsonify({
+            'attacks': attacks,
+            'descriptions': {
+                'syn_flood': 'SYN Flood DDoS Attack - Overwhelms target with SYN packets',
+                'port_scan': 'Port Scanning - Scans target for open ports',
+                'udp_flood': 'UDP Flood Attack - Floods target with UDP packets',
+                'icmp_flood': 'ICMP Flood Attack - Floods target with ICMP packets',
+                'http_flood': 'HTTP Flood Attack - Overwhelms web server with HTTP requests',
+                'dns_amplification': 'DNS Amplification Attack - Uses DNS servers to amplify attack traffic',
+                'brute_force': 'Brute Force Attack - Attempts to crack passwords through repeated attempts',
+                'slowloris': 'Slowloris Attack - Keeps connections open to exhaust server resources'
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting available attacks: {e}")
+        return jsonify({'error': 'Failed to get available attacks'}), 500
+
+@app.route('/api/mininet/export-topology', methods=['POST'])
+@token_required
+@admin_required
+def export_mininet_topology():
+    """Export current Mininet topology to file"""
+    try:
+        import os
+        import sys
+        
+        # Add topology directory to path
+        topology_dir = os.path.join(
+            os.path.dirname(__file__),
+            '../../mininet_data_generation/topology'
+        )
+        sys.path.append(topology_dir)
+        
+        from topology_exporter import TopologyExporter
+        
+        exporter = TopologyExporter()
+        output_file = exporter.export_topology()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Topology exported successfully',
+            'file': output_file
+        })
+        
+    except Exception as e:
+        logger.error(f"Error exporting topology: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/test/generate-alerts', methods=['POST'])
+@token_required
+@admin_required
+def test_generate_alerts():
+    """Test endpoint to manually generate alerts"""
+    try:
+        # Set simulation context
+        dashboard_api.current_simulation = 'syn_flood'
+        
+        # Ensure monitoring is running
+        if not dashboard_api.is_monitoring:
+            dashboard_api.start_monitoring()
+        
+        # Generate test alerts
+        dashboard_api._process_pcap_for_alerts('/fake/path/syn_flood.pcap')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Test alerts generated successfully',
+            'monitoring_active': dashboard_api.is_monitoring
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating test alerts: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/debug/status', methods=['GET'])
+@token_required
+@admin_required
+def debug_status():
+    """Debug endpoint to check system status"""
+    try:
+        return jsonify({
+            'monitoring_active': dashboard_api.is_monitoring,
+            'mininet_active': dashboard_api.mininet_active,
+            'mininet_mode': dashboard_api.mininet_mode,
+            'current_simulation': dashboard_api.current_simulation,
+            'detector_loaded': dashboard_api.detector is not None,
+            'dal_type': type(dashboard_api.dal).__name__
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting debug status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug/flush-db', methods=['POST'])
+@token_required
+@admin_required
+def flush_database():
+    """Flush all alerts from the database for clean testing"""
+    try:
+        from src.database.schemas import COLLECTIONS
+        
+        # Get current alert count
+        current_stats = dashboard_api.get_system_stats()
+        initial_count = current_stats.get('total_alerts', 0)
+        
+        # Delete all alerts from the alerts collection
+        alerts_collection = COLLECTIONS["alerts"]
+        result = dashboard_api.dal.db[alerts_collection].delete_many({})
+        deleted_count = result.deleted_count
+        
+        logger.info(f"🗑️ Flushed database: Deleted {deleted_count} alerts from {alerts_collection}")
+        
+        # Emit stats update to refresh dashboard
+        updated_stats = dashboard_api.get_system_stats()
+        socketio.emit('stats_update', updated_stats)
+        socketio.emit('alerts_cleared', {'count': deleted_count})
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully deleted {deleted_count} alerts',
+            'initial_count': initial_count,
+            'deleted_count': deleted_count,
+            'collection': alerts_collection
+        })
+        
+    except Exception as e:
+        logger.error(f"Error flushing database: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 if __name__ == '__main__':
-    print("🔐 Starting SOC Dashboard with Authentication...")
+    print("🚀 Starting SOC Dashboard Server")
+    print("=" * 50)
     print("📍 Server will be available at: http://localhost:5000")
     print("👤 Default admin credentials:")
     print("   Username: admin")
@@ -3858,6 +5089,20 @@ if __name__ == '__main__':
     print("   FLASK_SECRET_KEY - Flask session secret")
     print("   JWT_SECRET_KEY - JWT token signing key")
     print("")
+    
+    logger.info("🚀 Initializing SOC Dashboard...")
+    
+    # Create dashboard API instance
+    dashboard_api = SOCDashboardAPI()
+    logger.info(f"✅ Dashboard API created, detector loaded: {dashboard_api.detector is not None}")
+    
+    # Create CSV processor with shared detector
+    csv_processor = CSVProcessor(
+        detector=dashboard_api.detector,  # Share the same detector instance
+        upload_dir="src/dashboard/data/uploads",
+        reports_dir="src/dashboard/data/reports"
+    )
+    logger.info("✅ CSV processor initialized")
     
     # Ensure data directory and seed data exist
     if not os.path.exists('data'):
@@ -3870,8 +5115,35 @@ if __name__ == '__main__':
             print(f"❌ Failed to seed data: {e}")
             print("Please run: python scripts/seed_data.py")
     
-    # Start monitoring by default
-    dashboard_api.start_monitoring()
+    # Debug server startup environment
+    import os
+    logger.info(f"🔍 Server startup debug:")
+    logger.info(f"   - Current working directory: {os.getcwd()}")
+    logger.info(f"   - Models directory exists: {os.path.exists('models')}")
+    logger.info(f"   - Model status: detector={dashboard_api.detector is not None}")
+    
+    if os.path.exists('models'):
+        model_files = os.listdir('models')
+        logger.info(f"   - Model files: {[f for f in model_files if f.endswith('.pkl')]}")
+    
+    # Start monitoring by default (only if model is available)
+    if dashboard_api.detector:
+        logger.info("🔄 Starting monitoring system...")
+        dashboard_api.start_monitoring()
+    else:
+        logger.warning("⚠️ Model not available at startup, attempting to load...")
+        try:
+            dashboard_api.load_models()
+            if dashboard_api.detector:
+                logger.info("✅ Model loaded successfully, starting monitoring...")
+                dashboard_api.start_monitoring()
+            else:
+                logger.error("❌ Model loading failed at startup")
+        except Exception as e:
+            logger.error(f"❌ Model loading error at startup: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     # Run the server
+    logger.info("🌐 Starting Flask server...")
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)

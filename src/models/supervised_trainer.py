@@ -770,10 +770,58 @@ class SupervisedSOCDetector:
         joblib.dump(components, components_path)
         print(f"Saved preprocessing components to {components_path}")
     
+    def _load_mininet_models(self, model_dir):
+        """Load mininet-specific model files"""
+        import joblib
+        
+        try:
+            # Load components
+            self.scaler = joblib.load(f"{model_dir}/mininet_scaler.pkl")
+            self.feature_columns = joblib.load(f"{model_dir}/mininet_feature_columns.pkl")
+            self.feature_selector = joblib.load(f"{model_dir}/mininet_feature_selector.pkl")
+            
+            # Load label encoders if available
+            try:
+                self.label_encoders = joblib.load(f"{model_dir}/mininet_label_encoders.pkl")
+            except FileNotFoundError:
+                self.label_encoders = {}
+            
+            # Load models
+            self.ensemble_model = joblib.load(f"{model_dir}/mininet_ensemble_model.pkl")
+            self.random_forest_model = joblib.load(f"{model_dir}/mininet_random_forest_model.pkl")
+            self.xgboost_model = joblib.load(f"{model_dir}/mininet_xgboost_model.pkl")
+            
+            # Set up models dictionary for compatibility with predict_single
+            self.models = {
+                'ensemble': self.ensemble_model,
+                'random_forest': self.random_forest_model,
+                'xgboost': self.xgboost_model
+            }
+            
+            # Load metadata if available
+            try:
+                metadata = joblib.load(f"{model_dir}/mininet_model_metadata.pkl")
+                self.feature_importance = metadata.get('feature_importance', {})
+            except FileNotFoundError:
+                self.feature_importance = {}
+            
+            print("✅ Mininet models loaded successfully")
+            
+        except Exception as e:
+            raise ValueError(f"Failed to load mininet models: {e}")
+    
     def load_models(self, model_dir='models', timestamp=None):
         """
         Load trained models and components
         """
+        # Check for mininet models first (new format)
+        mininet_files = glob.glob(f"{model_dir}/mininet_*.pkl")
+        if mininet_files:
+            print(f"Loading mininet models from {model_dir}")
+            self._load_mininet_models(model_dir)
+            return
+        
+        # Fallback to supervised models (old format)
         if timestamp is None:
             # Find latest timestamp
             pattern = f"{model_dir}/supervised_components_*.pkl"
