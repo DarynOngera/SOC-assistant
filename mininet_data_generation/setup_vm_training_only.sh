@@ -44,8 +44,20 @@ install_training_packages() {
         python3 python3-pip \
         git wget \
         tcpdump \
-        openvswitch \
         zip unzip
+    
+    # Install Open vSwitch separately (different package names on different CentOS versions)
+    print_info "Installing Open vSwitch..."
+    if grep -q "release 7" /etc/centos-release 2>/dev/null; then
+        sudo $PACKAGE_MANAGER install -y openvswitch
+    else
+        # CentOS 8/9 - try different package names
+        sudo $PACKAGE_MANAGER install -y openvswitch2.17 || \
+        sudo $PACKAGE_MANAGER install -y openvswitch || \
+        sudo $PACKAGE_MANAGER install -y network-scripts-openvswitch || {
+            print_warning "OpenVSwitch package not found, will install from source later"
+        }
+    fi
     
     print_status "Training packages installed"
 }
@@ -90,8 +102,12 @@ install_mininet_training() {
         }
     fi
     
-    sudo systemctl enable openvswitch
-    sudo systemctl start openvswitch
+    # Start OpenVSwitch service (try different service names)
+    print_info "Starting OpenVSwitch service..."
+    sudo systemctl enable openvswitch 2>/dev/null || sudo systemctl enable openvswitch2.17 2>/dev/null || true
+    sudo systemctl start openvswitch 2>/dev/null || sudo systemctl start openvswitch2.17 2>/dev/null || {
+        print_warning "OpenVSwitch service not found, Mininet will handle OVS internally"
+    }
     
     print_status "Mininet installed for training"
 }
