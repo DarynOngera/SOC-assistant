@@ -1,0 +1,239 @@
+{
+  "vm_configuration": {
+    "name": "SOC Assistant Mininet VM",
+    "version": "1.0",
+    "description": "Optimized VM configuration for Mininet pipeline execution",
+    "last_updated": "2024-11-18"
+  },
+  "system_requirements": {
+    "minimum": {
+      "ram_gb": 8,
+      "cpu_cores": 4,
+      "disk_gb": 50,
+      "os": "Ubuntu 20.04 LTS / CentOS 7+"
+    },
+    "recommended": {
+      "ram_gb": 16,
+      "cpu_cores": 8,
+      "disk_gb": 100,
+      "os": "Ubuntu 22.04 LTS / CentOS 8+"
+    },
+    "optimal": {
+      "ram_gb": 32,
+      "cpu_cores": 16,
+      "disk_gb": 200,
+      "os": "Ubuntu 22.04 LTS / CentOS 9"
+    }
+  },
+  "vm_platforms": {
+    "supported": [
+      {
+        "name": "VMware Workstation",
+        "status": "recommended",
+        "performance": "excellent",
+        "notes": "Best performance, hardware acceleration support"
+      },
+      {
+        "name": "VMware Player",
+        "status": "recommended",
+        "performance": "excellent",
+        "notes": "Free version with good performance"
+      },
+      {
+        "name": "VirtualBox",
+        "status": "supported",
+        "performance": "good",
+        "notes": "Free, cross-platform, adequate performance"
+      },
+      {
+        "name": "KVM/QEMU",
+        "status": "supported",
+        "performance": "excellent",
+        "notes": "Linux hosts only, near-native performance"
+      },
+      {
+        "name": "Hyper-V",
+        "status": "supported",
+        "performance": "good",
+        "notes": "Windows hosts, requires Windows Pro/Enterprise"
+      },
+      {
+        "name": "Cloud VMs",
+        "status": "supported",
+        "performance": "variable",
+        "notes": "AWS, GCP, Azure - performance depends on instance type"
+      }
+    ]
+  },
+  "network_configuration": {
+    "adapters": [
+      {
+        "name": "NAT",
+        "purpose": "Internet access",
+        "required": true,
+        "settings": {
+          "dhcp": true,
+          "dns": "auto"
+        }
+      },
+      {
+        "name": "Host-only",
+        "purpose": "Dashboard access from host",
+        "required": false,
+        "settings": {
+          "ip_range": "192.168.56.0/24",
+          "dhcp": true
+        }
+      }
+    ],
+    "isolation": {
+      "namespace": "mininet_isolated",
+      "firewall": "ufw",
+      "allowed_ports": [22, 5000, 8080]
+    }
+  },
+  "performance_optimizations": {
+    "vm_settings": {
+      "hardware_acceleration": true,
+      "3d_acceleration": false,
+      "nested_virtualization": true,
+      "paravirtualization": true
+    },
+    "system_settings": {
+      "swappiness": 10,
+      "dirty_ratio": 15,
+      "dirty_background_ratio": 5,
+      "max_file_descriptors": 65536
+    },
+    "network_settings": {
+      "rmem_max": 134217728,
+      "wmem_max": 134217728,
+      "tcp_rmem": "4096 87380 134217728",
+      "tcp_wmem": "4096 65536 134217728"
+    }
+  },
+  "pipeline_configuration": {
+    "sample_sizes": {
+      "vm_optimized": {
+        "normal_traffic": 25000,
+        "attack_traffic": 10000,
+        "total": 35000,
+        "execution_time_minutes": 15
+      },
+      "standard": {
+        "normal_traffic": 70000,
+        "attack_traffic": 30000,
+        "total": 100000,
+        "execution_time_minutes": 25
+      },
+      "large_scale": {
+        "normal_traffic": 175000,
+        "attack_traffic": 75000,
+        "total": 250000,
+        "execution_time_minutes": 60
+      }
+    },
+    "attack_distribution": {
+      "syn_flood": 0.33,
+      "port_scan": 0.33,
+      "udp_flood": 0.17,
+      "http_flood": 0.17
+    }
+  },
+  "monitoring": {
+    "resource_thresholds": {
+      "cpu_warning": 80,
+      "cpu_critical": 95,
+      "memory_warning": 80,
+      "memory_critical": 95,
+      "disk_warning": 85,
+      "disk_critical": 95
+    },
+    "log_locations": {
+      "setup": "/tmp/vm_mininet_setup.log",
+      "pipeline": "logs/pipeline.log",
+      "mininet": "/var/log/mininet.log",
+      "system": "/var/log/syslog"
+    }
+  },
+  "security": {
+    "firewall": {
+      "enabled": true,
+      "default_policy": "deny",
+      "allowed_services": ["ssh", "http"],
+      "allowed_ports": [22, 5000, 8080]
+    },
+    "network_isolation": {
+      "namespace": "mininet_isolated",
+      "bridge_isolation": true,
+      "container_isolation": false
+    },
+    "user_permissions": {
+      "groups": ["sudo", "wireshark", "netdev"],
+      "capabilities": ["cap_net_raw", "cap_net_admin"]
+    }
+  },
+  "troubleshooting": {
+    "common_issues": [
+      {
+        "issue": "Permission denied errors",
+        "solution": "Run with sudo or fix file permissions",
+        "command": "sudo chown -R $USER:$USER /path/to/project"
+      },
+      {
+        "issue": "Network interface issues",
+        "solution": "Clean up and restart networking",
+        "command": "sudo mn -c && sudo systemctl restart networking"
+      },
+      {
+        "issue": "Memory issues",
+        "solution": "Increase VM RAM or reduce sample size",
+        "command": "Edit vm_config.json sample sizes"
+      },
+      {
+        "issue": "Disk space issues",
+        "solution": "Clean up old files and increase VM disk",
+        "command": "sudo rm -rf data_capture/pcaps/*.old"
+      },
+      {
+        "issue": "CentOS package installation fails",
+        "solution": "Enable EPEL and PowerTools/CRB repositories",
+        "command": "sudo dnf install epel-release && sudo dnf config-manager --set-enabled powertools"
+      },
+      {
+        "issue": "Firewalld blocking connections",
+        "solution": "Configure firewall rules for dashboard access",
+        "command": "sudo firewall-cmd --permanent --add-port=5000/tcp && sudo firewall-cmd --reload"
+      },
+      {
+        "issue": "SELinux preventing Mininet execution",
+        "solution": "Set SELinux to permissive mode temporarily",
+        "command": "sudo setenforce 0"
+      }
+    ],
+    "diagnostic_commands": [
+      "free -h",
+      "df -h",
+      "ps aux | grep mininet",
+      "sudo ovs-vsctl show",
+      "ip addr show",
+      "sudo mn --test pingall"
+    ]
+  },
+  "integration": {
+    "dashboard": {
+      "url": "http://VM_IP:5000",
+      "default_credentials": "Check users.json",
+      "api_endpoints": [
+        "/api/alerts",
+        "/api/statistics",
+        "/api/mininet/status"
+      ]
+    },
+    "model_paths": {
+      "trained_models": "../models/",
+      "mininet_models": "../models/mininet/",
+      "reports": "reports/"
+    }
+  }
+}
