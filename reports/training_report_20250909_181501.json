@@ -1,0 +1,322 @@
+{
+  "timestamp": "20250909_181501",
+  "training_summary": {
+    "total_models_trained": 2,
+    "feature_count": 15,
+    "best_model": "random_forest",
+    "best_val_recall_normal": 0,
+    "imbalance_handling": "SMOTE"
+  },
+  "model_performance": {
+    "random_forest": {
+      "f1_score": 0.9755371756159468,
+      "precision": 0.9996860845777837,
+      "recall": 0.9525274537452464,
+      "recall_normal": 0.9956167814652473,
+      "accuracy": 0.95528,
+      "balanced_accuracy": 0.9740721176052469,
+      "pr_auc": 0.9997737048119051,
+      "auc": 0.9967189908512979,
+      "best_threshold": 0.5,
+      "confusion_matrix": [
+        [
+          3180,
+          14
+        ],
+        [
+          2222,
+          44584
+        ]
+      ],
+      "f1_normal": 0.7398790134946487,
+      "f1_attack": 0.9755371756159468
+    },
+    "xgboost": {
+      "f1_score": 0.9634394791620532,
+      "precision": 0.9999310503332567,
+      "recall": 0.929517583215827,
+      "recall_normal": 0.9990607388854101,
+      "accuracy": 0.93396,
+      "balanced_accuracy": 0.9642891610506186,
+      "pr_auc": 0.9994789200660317,
+      "auc": 0.9934855407514693,
+      "best_threshold": 0.5,
+      "confusion_matrix": [
+        [
+          3191,
+          3
+        ],
+        [
+          3299,
+          43507
+        ]
+      ],
+      "f1_normal": 0.6590251961999174,
+      "f1_attack": 0.9634394791620532
+    }
+  },
+  "data_info": {
+    "train_size": 149998,
+    "val_size": 50000,
+    "test_size": 50000,
+    "total_samples": 249998,
+    "feature_count": 15,
+    "selected_features": [
+      "dur",
+      "proto",
+      "state",
+      "spkts",
+      "dpkts",
+      "rate",
+      "sttl",
+      "dttl",
+      "sload",
+      "dload",
+      "sinpkt",
+      "dinpkt",
+      "smean",
+      "dmean",
+      "ct_dst_sport_ltm"
+    ]
+  },
+  "feature_importance": {
+    "dur": 0.17835707097985332,
+    "proto": 0.13768987754282858,
+    "state": 0.14900737313824974,
+    "spkts": 0.14812458140685325,
+    "dpkts": 0.16596813965478185,
+    "rate": 0.17747016154132178,
+    "sttl": 0.1707285715138932,
+    "dttl": 0.1695020910240781,
+    "sload": 0.16197689849373764,
+    "dload": 0.15543464083100011,
+    "sinpkt": 0.15541031500955294,
+    "dinpkt": 0.1584137600019031,
+    "smean": 0.1753644289850036,
+    "dmean": 0.17529154101357836,
+    "ct_dst_sport_ltm": 0.1385509233794573
+  },
+  "visualizations": {
+    "roc_pr_curves": "reports/roc_pr_curves_20250909_181459.png",
+    "confusion_matrix_random_forest": "reports/confusion_matrix_random_forest_20250909_181459.png",
+    "confusion_matrix_xgboost": "reports/confusion_matrix_xgboost_20250909_181459.png",
+    "attack_distribution": "reports/attack_distribution_20250909_181459.png",
+    "attack_distribution_chartjs": {
+      "type": "bar",
+      "data": {
+        "labels": [
+          2,
+          3,
+          1,
+          4,
+          5,
+          "Normal",
+          6,
+          "Generic",
+          "Exploits",
+          7,
+          8,
+          "Fuzzers",
+          9,
+          "DoS",
+          10,
+          "Reconnaissance",
+          18,
+          19,
+          16,
+          11,
+          17,
+          23,
+          12,
+          13,
+          14,
+          22,
+          24,
+          25,
+          15,
+          20,
+          21,
+          34,
+          37,
+          27,
+          42,
+          "Analysis",
+          26,
+          "Backdoor",
+          33,
+          44,
+          35,
+          39,
+          32,
+          28,
+          "Shellcode",
+          30,
+          45,
+          29,
+          31,
+          40,
+          36,
+          38,
+          43,
+          41,
+          49,
+          48,
+          46,
+          60,
+          47,
+          54,
+          50,
+          56,
+          "Worms",
+          52,
+          51,
+          58,
+          57,
+          53,
+          55,
+          67,
+          61,
+          59
+        ],
+        "datasets": [
+          {
+            "label": "Number of Events",
+            "data": [
+              33489,
+              30428,
+              24342,
+              23626,
+              17579,
+              15969,
+              12048,
+              11243,
+              9719,
+              7954,
+              6788,
+              5230,
+              4320,
+              3449,
+              3080,
+              2944,
+              2706,
+              2589,
+              2409,
+              2351,
+              2341,
+              2058,
+              1878,
+              1832,
+              1773,
+              1563,
+              1428,
+              1371,
+              1358,
+              1156,
+              938,
+              679,
+              620,
+              609,
+              589,
+              585,
+              576,
+              509,
+              506,
+              413,
+              404,
+              377,
+              372,
+              328,
+              322,
+              297,
+              297,
+              279,
+              275,
+              273,
+              271,
+              269,
+              240,
+              198,
+              196,
+              92,
+              91,
+              54,
+              47,
+              43,
+              31,
+              31,
+              30,
+              28,
+              25,
+              23,
+              18,
+              15,
+              14,
+              5,
+              4,
+              4
+            ],
+            "backgroundColor": [
+              "#2ecc71",
+              "#e74c3c",
+              "#3498db",
+              "#9b59b6",
+              "#f1c40f",
+              "#e67e22",
+              "#1abc9c",
+              "#34495e",
+              "#7f8c8d",
+              "#d35400"
+            ],
+            "borderColor": [
+              "#2ecc71",
+              "#e74c3c",
+              "#3498db",
+              "#9b59b6",
+              "#f1c40f",
+              "#e67e22",
+              "#1abc9c",
+              "#34495e",
+              "#7f8c8d",
+              "#d35400"
+            ],
+            "borderWidth": 1
+          }
+        ]
+      },
+      "options": {
+        "scales": {
+          "y": {
+            "beginAtZero": true,
+            "title": {
+              "display": true,
+              "text": "Number of Events"
+            }
+          },
+          "x": {
+            "title": {
+              "display": true,
+              "text": "Attack Category"
+            }
+          }
+        },
+        "plugins": {
+          "title": {
+            "display": true,
+            "text": "Attack Category Distribution in UNSW-NB15 Dataset"
+          },
+          "legend": {
+            "display": true
+          }
+        }
+      }
+    },
+    "feature_importance": "reports/feature_importance_20250909_181459.png"
+  },
+  "training_parameters": {
+    "random_state": 42,
+    "scaler_type": "RobustScaler",
+    "imbalance_handling": "SMOTE",
+    "threshold_optimization": "weighted_recall_f1_normal",
+    "cross_validation": "3-fold"
+  }
+}

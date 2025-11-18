@@ -1,0 +1,15 @@
+# VM Training-Only Requirements
+# Minimal packages for Mininet + Model Training
+
+# Core ML packages
+pandas==1.5.3
+numpy==1.21.6
+scikit-learn==1.1.3
+xgboost==1.6.2
+joblib==1.2.0
+
+# Network analysis
+scapy==2.5.0
+
+# Utilities
+pathlib2>=2.3.0

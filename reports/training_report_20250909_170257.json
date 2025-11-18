@@ -1,0 +1,107 @@
+{
+  "timestamp": "20250909_170257",
+  "training_summary": {
+    "total_models_trained": 2,
+    "feature_count": 15,
+    "best_model": "random_forest",
+    "best_val_recall_normal": 0,
+    "imbalance_handling": "SMOTE"
+  },
+  "model_performance": {
+    "random_forest": {
+      "f1_score": 0.9640794103977159,
+      "precision": 1.0,
+      "recall": 0.9306499166773491,
+      "recall_normal": 1.0,
+      "accuracy": 0.93508,
+      "balanced_accuracy": 0.9653249583386745,
+      "pr_auc": 0.9997718983060826,
+      "auc": 0.9966964755547424,
+      "best_threshold": 0.7040816326530612,
+      "confusion_matrix": [
+        [
+          3194,
+          0
+        ],
+        [
+          3246,
+          43560
+        ]
+      ],
+      "f1_normal": 0.6630682997716421,
+      "f1_attack": 0.9640794103977159
+    },
+    "xgboost": {
+      "f1_score": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "recall_normal": 0.0,
+      "accuracy": 0.0,
+      "balanced_accuracy": 0.0,
+      "pr_auc": 0.0,
+      "auc": 0.0,
+      "best_threshold": 0.5,
+      "confusion_matrix": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "f1_normal": 0.0,
+      "f1_attack": 0.0,
+      "error": "need to call fit or load_model beforehand"
+    }
+  },
+  "data_info": {
+    "train_size": 149998,
+    "val_size": 50000,
+    "test_size": 50000,
+    "total_samples": 249998,
+    "feature_count": 15,
+    "selected_features": [
+      "dur",
+      "proto",
+      "state",
+      "spkts",
+      "dpkts",
+      "rate",
+      "sttl",
+      "dttl",
+      "sload",
+      "dload",
+      "sinpkt",
+      "dinpkt",
+      "smean",
+      "dmean",
+      "ct_dst_sport_ltm"
+    ]
+  },
+  "feature_importance": {
+    "dur": 0.17810913088669944,
+    "proto": 0.13751059359613804,
+    "state": 0.14919671022330405,
+    "spkts": 0.14790800125988324,
+    "dpkts": 0.1660922934229494,
+    "rate": 0.17723688219438816,
+    "sttl": 0.1714178939482892,
+    "dttl": 0.16933522387253297,
+    "sload": 0.1621075730736652,
+    "dload": 0.15514881109495482,
+    "sinpkt": 0.15533135257106112,
+    "dinpkt": 0.15818444003231225,
+    "smean": 0.17515698034361815,
+    "dmean": 0.17481700311661108,
+    "ct_dst_sport_ltm": 0.13809866287136985
+  },
+  "training_parameters": {
+    "random_state": 42,
+    "scaler_type": "RobustScaler",
+    "imbalance_handling": "SMOTE",
+    "threshold_optimization": "recall_normal",
+    "cross_validation": "3-fold"
+  }
+}

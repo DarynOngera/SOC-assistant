@@ -1,0 +1,87 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SOC Model Training Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .header { background: #2c3e50; color: white; padding: 20px; border-radius: 5px; }
+        .summary { background: #ecf0f1; padding: 15px; margin: 20px 0; border-radius: 5px; }
+        .model-results { margin: 20px 0; }
+        .model { background: #f8f9fa; padding: 15px; margin: 10px 0; border-left: 4px solid #3498db; }
+        .metric { display: inline-block; margin: 5px 15px 5px 0; }
+        .best { border-left-color: #27ae60; background: #d5f4e6; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #34495e; color: white; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>SOC Anomaly Detection - Training Report</h1>
+        <p>Generated: 20250909_170257</p>
+    </div>
+    
+    <div class="summary">
+        <h2>Training Summary</h2>
+        <p><strong>Models Trained:</strong> 2</p>
+        <p><strong>Features Used:</strong> 15</p>
+        <p><strong>Best Model:</strong> random_forest</p>
+        <p><strong>Best Validation Normal Recall:</strong> 0.0000</p>
+        <p><strong>Imbalance Handling:</strong> SMOTE</p>
+    </div>
+    
+    <div class="model-results">
+        <h2>Model Performance</h2>
+
+        <div class="model best">
+            <h3>Random Forest</h3>
+            <div class="metric"><strong>Train F1 Score:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation F1 Score:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation Precision:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation Recall:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation Normal Recall:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation Balanced Accuracy:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation PR AUC:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation AUC:</strong> 0.0000</div>
+            <div class="metric"><strong>Cross-Validation F1 (Mean):</strong> 0.0000</div>
+            <div class="metric"><strong>Cross-Validation F1 (Std):</strong> 0.0000</div>
+            <div class="metric"><strong>Optimal Threshold:</strong> 0.704</div>
+            <div class="metric"><strong>Confusion Matrix:</strong> [[3194, 0], [3246, 43560]]</div>
+            <div class="metric"><strong>F1 Normal:</strong> 0.6631</div>
+            <div class="metric"><strong>F1 Attack:</strong> 0.9641</div>
+</div>
+        <div class="model">
+            <h3>Xgboost</h3>
+            <div class="metric"><strong>Train F1 Score:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation F1 Score:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation Precision:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation Recall:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation Normal Recall:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation Balanced Accuracy:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation PR AUC:</strong> 0.0000</div>
+            <div class="metric"><strong>Validation AUC:</strong> 0.0000</div>
+            <div class="metric"><strong>Cross-Validation F1 (Mean):</strong> 0.0000</div>
+            <div class="metric"><strong>Cross-Validation F1 (Std):</strong> 0.0000</div>
+            <div class="metric"><strong>Optimal Threshold:</strong> 0.500</div>
+            <div class="metric"><strong>Confusion Matrix:</strong> [[0, 0], [0, 0]]</div>
+            <div class="metric"><strong>F1 Normal:</strong> 0.0000</div>
+            <div class="metric"><strong>F1 Attack:</strong> 0.0000</div>
+<div class='metric'><strong>Error:</strong> need to call fit or load_model beforehand</div></div>
+    <div class="summary">
+        <h2>Feature Importance</h2>
+        <table>
+            <tr><th>Feature</th><th>Score</th></tr>
+<tr><td>dur</td><td>0.1781</td></tr><tr><td>proto</td><td>0.1375</td></tr><tr><td>state</td><td>0.1492</td></tr><tr><td>spkts</td><td>0.1479</td></tr><tr><td>dpkts</td><td>0.1661</td></tr><tr><td>rate</td><td>0.1772</td></tr><tr><td>sttl</td><td>0.1714</td></tr><tr><td>dttl</td><td>0.1693</td></tr><tr><td>sload</td><td>0.1621</td></tr><tr><td>dload</td><td>0.1551</td></tr><tr><td>sinpkt</td><td>0.1553</td></tr><tr><td>dinpkt</td><td>0.1582</td></tr><tr><td>smean</td><td>0.1752</td></tr><tr><td>dmean</td><td>0.1748</td></tr><tr><td>ct_dst_sport_ltm</td><td>0.1381</td></tr>
+        </table>
+    </div>
+
+    <div class="summary">
+        <h2>Training Configuration</h2>
+        <table>
+            <tr><th>Parameter</th><th>Value</th></tr>
+<tr><td>Random State</td><td>42</td></tr><tr><td>Scaler Type</td><td>RobustScaler</td></tr><tr><td>Imbalance Handling</td><td>SMOTE</td></tr><tr><td>Threshold Optimization</td><td>recall_normal</td></tr><tr><td>Cross Validation</td><td>3-fold</td></tr>
+        </table>
+    </div>
+</body>
+</html>

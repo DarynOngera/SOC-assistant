@@ -1,0 +1,33 @@
+{
+  "timestamp": "20250909_161555",
+  "training_summary": {
+    "total_models_trained": 2,
+    "feature_count": 42,
+    "best_model": "random_forest",
+    "best_f1_score": 0.994388608576208
+  },
+  "model_performance": {
+    "random_forest": {
+      "f1_score": 0.994388608576208,
+      "precision": 0.9946402141737768,
+      "recall": 0.9941371302394639,
+      "accuracy": 0.9894242550072025,
+      "auc": 0.9984658096544669,
+      "best_threshold": 0.1163265306122449
+    }
+  },
+  "data_info": {
+    "train_size": 585204,
+    "val_size": 195068,
+    "test_size": 195069,
+    "total_samples": 975341,
+    "feature_count": 30
+  },
+  "feature_importance": {},
+  "training_parameters": {
+    "random_state": 42,
+    "scaler_type": "RobustScaler",
+    "imbalance_handling": "class_weight_balanced",
+    "threshold_optimization": true
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "timestamp": "20250909_154628",
+  "training_summary": {
+    "total_models_trained": 2,
+    "feature_count": 42,
+    "best_model": "xgboost",
+    "best_f1_score": 0.9952567404930593
+  },
+  "model_performance": {
+    "random_forest": {
+      "f1_score": 0.9951877694808287,
+      "precision": 0.9955479601166891,
+      "recall": 0.9948278393856496,
+      "accuracy": 0.9909314140124776,
+      "auc": 0.9989317855763769,
+      "best_threshold": 0.1
+    },
+    "xgboost": {
+      "f1_score": 0.9952567404930593,
+      "precision": 0.9965592265621166,
+      "recall": 0.9939576546345495,
+      "accuracy": 0.9910698265741865,
+      "auc": 0.9990353098828902,
+      "best_threshold": 0.1
+    }
+  },
+  "data_info": {
+    "train_size": 585204,
+    "val_size": 195068,
+    "test_size": 195069,
+    "total_samples": 975341,
+    "feature_count": 42
+  },
+  "feature_importance": {},
+  "training_parameters": {
+    "random_state": 42,
+    "scaler_type": "RobustScaler",
+    "imbalance_handling": "class_weight_balanced",
+    "threshold_optimization": true
+  }
+}

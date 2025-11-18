@@ -1,0 +1,66 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SOC Model Training Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .header { background: #2c3e50; color: white; padding: 20px; border-radius: 5px; }
+        .summary { background: #ecf0f1; padding: 15px; margin: 20px 0; border-radius: 5px; }
+        .model-results { margin: 20px 0; }
+        .model { background: #f8f9fa; padding: 15px; margin: 10px 0; border-left: 4px solid #3498db; }
+        .metric { display: inline-block; margin: 5px 15px 5px 0; }
+        .best { border-left-color: #27ae60; background: #d5f4e6; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #34495e; color: white; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>SOC Anomaly Detection - Training Report</h1>
+        <p>Generated: 20250926_110322</p>
+    </div>
+    
+    <div class="summary">
+        <h2>Training Summary</h2>
+        <p><strong>Models Trained:</strong> 2</p>
+        <p><strong>Features Used:</strong> 42</p>
+        <p><strong>Best Model:</strong> xgboost</p>
+        <p><strong>Best F1 Score:</strong> 0.9953</p>
+    </div>
+    
+    <div class="model-results">
+        <h2>Model Performance</h2>
+
+        <div class="model">
+            <h3>Random Forest</h3>
+            <div class="metric"><strong>F1 Score:</strong> 0.9952</div>
+            <div class="metric"><strong>Precision:</strong> 0.9955</div>
+            <div class="metric"><strong>Recall:</strong> 0.9948</div>
+            <div class="metric"><strong>Accuracy:</strong> 0.9909</div>
+            <div class="metric"><strong>AUC:</strong> 0.9989</div>
+            <div class="metric"><strong>Optimal Threshold:</strong> 0.100</div>
+        </div>
+
+        <div class="model best">
+            <h3>Xgboost</h3>
+            <div class="metric"><strong>F1 Score:</strong> 0.9953</div>
+            <div class="metric"><strong>Precision:</strong> 0.9966</div>
+            <div class="metric"><strong>Recall:</strong> 0.9940</div>
+            <div class="metric"><strong>Accuracy:</strong> 0.9911</div>
+            <div class="metric"><strong>AUC:</strong> 0.9990</div>
+            <div class="metric"><strong>Optimal Threshold:</strong> 0.100</div>
+        </div>
+
+    </div>
+    
+    <div class="summary">
+        <h2>Training Configuration</h2>
+        <table>
+            <tr><th>Parameter</th><th>Value</th></tr>
+<tr><td>Random State</td><td>42</td></tr><tr><td>Scaler Type</td><td>RobustScaler</td></tr><tr><td>Imbalance Handling</td><td>class_weight_balanced</td></tr><tr><td>Threshold Optimization</td><td>True</td></tr>
+        </table>
+    </div>
+</body>
+</html>
