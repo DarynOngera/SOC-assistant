@@ -1,68 +1,31 @@
-# Mininet-Based Network Data Generation for SOC Assistant
+# VM Training-Only Setup
 
-This module replaces the existing dataset with Mininet-generated network traffic data for training intrusion detection models.
+This directory contains a **clean, minimal setup** for VM-based Mininet training and model export.
 
-## Overview
+## 🎯 Purpose
 
-The system generates realistic network traffic using Mininet simulation, including:
-- **Normal Traffic**: HTTP, FTP, SSH, DNS, ping traffic
-- **Attack Traffic**: DDoS, port scanning, SYN flood, brute force
+**VM Side**: Generate network data + Train models  
+**Host Side**: Load exported models + Run inference
 
-## Architecture
+## 🚀 Quick Start
 
-```
-mininet_data_generation/
-├── topology/              # Network topology definitions
-├── traffic_generators/    # Normal and attack traffic scripts
-├── data_capture/         # Packet capture and preprocessing
-├── models/               # ML model training scripts
-├── simulation/           # Real-time attack simulation
-└── integration/          # Dashboard integration
-```
-
-## Requirements
-
-### System Requirements
-- Ubuntu/Linux system with root access
-- Mininet installed: `sudo apt-get install mininet`
-- Python 3.8+
-- Network tools: tcpdump, hping3, nmap
-
-### Python Dependencies
+### 1. VM Setup (CentOS)
 ```bash
-pip install scapy pandas numpy scikit-learn tensorflow xgboost imbalanced-learn
+# Run VM training setup
+sudo ./setup_vm_training_only.sh
+
+# Execute training pipeline  
+./run_vm_training.sh
+
+# Export models for host
+# Creates: exported_models.zip
 ```
 
-## Quick Start
-
-### 1. Generate Normal Traffic Data
+### 2. Host Integration
 ```bash
-sudo python topology/generate_normal_traffic.py
-```
-
-### 2. Generate Attack Traffic Data
-```bash
-sudo python topology/generate_attack_traffic.py
-```
-
-### 3. Preprocess Captured Data
-```bash
-python data_capture/preprocess_pcap.py
-```
-
-### 4. Train Models
-```bash
-python models/train_mininet_models.py
-```
-
-### 5. Run Real-Time Simulation
-```bash
-sudo python simulation/realtime_attack_sim.py
-```
-
-### 6. Integrate with Dashboard
-```bash
-python integration/integrate_dashboard.py
+# Copy exported_models.zip to host system
+# Extract and integrate with host dashboard
+# Use host_integration.py for inference
 ```
 
 ## Data Generation Process
