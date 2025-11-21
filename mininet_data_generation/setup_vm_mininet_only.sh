@@ -66,8 +66,15 @@ install_system_packages() {
         tcpdump wireshark \
         net-tools iproute \
         gcc make \
-        hping3 nmap netcat \
+        nmap netcat \
         zip unzip
+    
+    # Try to install hping3 (optional - used for some attack simulations)
+    print_info "Installing optional packages..."
+    sudo $PACKAGE_MANAGER install -y hping3 2>/dev/null || {
+        print_warning "hping3 not available in repositories (optional - some attacks may not work)"
+        print_info "You can install it manually later if needed"
+    }
     
     print_status "System packages installed"
 }
