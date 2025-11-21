@@ -339,7 +339,7 @@ class SOCDashboardAPI:
         self.simulation_duration = 0
         self.simulation_start_time = None
         
-        # Mininet integration state
+        # Mininet integration state (now remote VM-based)
         self.mininet_active = False
         self.mininet_process = None
         self.mininet_mode = 'normal'  # 'normal' or 'attack'
@@ -347,6 +347,34 @@ class SOCDashboardAPI:
             'syn_flood', 'port_scan', 'udp_flood', 'icmp_flood',
             'http_flood', 'dns_amplification', 'brute_force', 'slowloris'
         ]
+        
+        # Initialize remote Mininet client
+        self.mininet_client = None
+        self._initialize_mininet_client()
+    
+    def _initialize_mininet_client(self):
+        """Initialize remote Mininet VM client"""
+        try:
+            from mininet_client import MininetClient
+            
+            # Get VM configuration from environment variables
+            vm_host = os.getenv('MININET_VM_HOST', '192.168.1.100')
+            vm_port = int(os.getenv('MININET_VM_PORT', '5001'))
+            
+            logger.info(f"Initializing Mininet client for VM: {vm_host}:{vm_port}")
+            
+            self.mininet_client = MininetClient(vm_host=vm_host, vm_port=vm_port)
+            
+            # Check if VM is available
+            if self.mininet_client.is_available():
+                logger.info("✅ Mininet VM is available and ready")
+            else:
+                logger.warning("⚠️  Mininet VM is not reachable. Simulation features will be disabled.")
+                logger.warning(f"   Please ensure VM is running at {vm_host}:{vm_port}")
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize Mininet client: {e}")
+            self.mininet_client = None
         
     def load_models(self):
         """Load ML models for anomaly detection"""
@@ -868,87 +896,67 @@ class SOCDashboardAPI:
                 'detection_rate': 0.0
             }
     
-    # Mininet Integration Methods
-    def start_mininet_simulation(self, mode='normal', attack_type=None, duration=5):
-        """Start Mininet simulation by replaying existing PCAP files"""
+    # Mininet Integration Methods (Remote VM-based)
+    def start_mininet_simulation(self, mode='normal', attack_type=None, duration=60, samples=10000):
+        """Start Mininet simulation on remote VM"""
         if self.mininet_active:
             return {'success': False, 'message': 'Mininet simulation already running'}
         
+        # Check if Mininet client is available
+        if not self.mininet_client:
+            return {
+                'success': False,
+                'message': 'Mininet VM not configured. Set MININET_VM_HOST and MININET_VM_PORT environment variables.'
+            }
+        
+        # Check VM availability
+        if not self.mininet_client.is_available():
+            return {
+                'success': False,
+                'message': 'Mininet VM is not reachable. Please ensure VM is running and accessible.'
+            }
+        
         try:
-            import os
-            import glob
+            logger.info(f"Starting remote Mininet simulation: {mode} ({attack_type if attack_type else 'N/A'})")
             
-            # Ensure topology is exported first
-            self._ensure_topology_exported()
-            
-            # Find existing PCAP files
-            pcap_dir = os.path.join(
-                os.path.dirname(__file__), 
-                '..', '..', 
-                'mininet_data_generation', 
-                'data_capture', 
-                'mininet'
+            # Start simulation on VM
+            result = self.mininet_client.start_simulation(
+                mode=mode,
+                attack_type=attack_type,
+                duration=duration,
+                samples=samples
             )
             
-            if mode == 'normal':
-                # Look for normal traffic PCAP in parent directory
-                normal_pcap_dir = os.path.join(
-                    os.path.dirname(__file__), 
-                    '..', '..', 
-                    'data_capture', 
-                    'pcaps'
-                )
-                pcap_files = glob.glob(os.path.join(normal_pcap_dir, 'normal_traffic_*.pcap'))
-                if not pcap_files:
-                    return {'success': False, 'message': 'No normal traffic PCAP files found. Run the Mininet pipeline first.'}
-                pcap_file = max(pcap_files, key=os.path.getctime)  # Get latest file
-                simulation_name = 'normal_traffic'
-                
-            elif mode == 'attack' and attack_type:
-                pcap_file = os.path.join(pcap_dir, f'{attack_type}.pcap')
-                if not os.path.exists(pcap_file):
-                    return {'success': False, 'message': f'PCAP file for {attack_type} not found. Run the Mininet pipeline first.'}
-                simulation_name = attack_type
-                
-            else:
-                return {'success': False, 'message': 'Invalid mode or missing attack type'}
+            if not result['success']:
+                return result
             
-            # Start simulation replay
-            logger.info(f"Starting Mininet simulation replay: {mode} ({attack_type if attack_type else 'N/A'})")
-            logger.info(f"Using PCAP file: {pcap_file}")
-            
+            # Update local state
             self.mininet_active = True
             self.mininet_mode = mode
-            self.current_simulation = simulation_name
+            self.current_simulation = attack_type if attack_type else 'normal_traffic'
             self.simulation_start_time = datetime.now()
             self.simulation_duration = duration
-            self.simulation_pcap_file = pcap_file
-            self.mininet_process = None  # No actual process for replay
             
-            # Ensure monitoring is active for real-time updates
+            # Ensure monitoring is active
             if not self.is_monitoring:
                 logger.info("🔄 Starting monitoring system for Mininet simulation")
-                success = self.start_monitoring()
-                if not success:
-                    logger.error("❌ Failed to start monitoring for Mininet simulation")
-                    # Continue anyway - Mininet simulation can still work
+                self.start_monitoring()
             
-            # Start replay processing thread
-            replay_thread = threading.Thread(
-                target=self._replay_pcap_simulation,
-                args=(pcap_file, duration),
+            # Start thread to monitor VM simulation and download PCAP when complete
+            monitor_thread = threading.Thread(
+                target=self._monitor_vm_simulation,
+                args=(duration,),
                 daemon=True
             )
-            replay_thread.start()
+            monitor_thread.start()
             
             return {
                 'success': True,
-                'message': f'Mininet {mode} simulation started (replaying PCAP)',
+                'message': f'Mininet {mode} simulation started on VM',
                 'mode': mode,
                 'attack_type': attack_type,
                 'duration': duration,
-                'pcap_file': pcap_file,
-                'replay_mode': True
+                'vm_mode': True
             }
             
         except Exception as e:
@@ -956,19 +964,25 @@ class SOCDashboardAPI:
             return {'success': False, 'message': f'Failed to start simulation: {str(e)}'}
     
     def stop_mininet_simulation(self):
-        """Stop current Mininet simulation"""
+        """Stop current Mininet simulation on VM"""
         if not self.mininet_active:
             return {'success': False, 'message': 'No active Mininet simulation'}
         
+        if not self.mininet_client:
+            return {'success': False, 'message': 'Mininet VM not configured'}
+        
         try:
-            logger.info("Stopping Mininet simulation")
+            logger.info("Stopping Mininet simulation on VM")
             
-            # For PCAP replay mode, just update the state
+            # Stop simulation on VM
+            result = self.mininet_client.stop_simulation()
+            
+            # Update local state
             self.mininet_active = False
             self.mininet_process = None
             self.current_simulation = None
             
-            return {'success': True, 'message': 'Mininet simulation stopped'}
+            return result
             
         except Exception as e:
             logger.error(f"Error stopping Mininet simulation: {e}")
@@ -1005,41 +1019,91 @@ class SOCDashboardAPI:
         except Exception as e:
             logger.warning(f"Could not export topology: {e}")
     
-    def _replay_pcap_simulation(self, pcap_file, duration):
-        """Replay PCAP file simulation with immediate alert generation"""
+    def _monitor_vm_simulation(self, duration):
+        """Monitor VM simulation progress and download PCAP when complete"""
         try:
             import time
+            import os
             
-            logger.info(f"Starting PCAP replay simulation for {duration} seconds")
+            logger.info(f"Monitoring VM simulation for {duration} seconds")
             
-            # Process PCAP file and generate alerts immediately
-            self._process_pcap_for_alerts(pcap_file)
+            # Poll VM status periodically
+            check_interval = 5  # Check every 5 seconds
+            elapsed = 0
             
-            # For PCAP replay, we don't need to wait - alerts are generated instantly
-            # Just wait a short time to let the frontend show progress, then complete
-            time.sleep(2)  # Just 2 seconds for visual feedback
+            while elapsed < duration + 30:  # Add buffer time
+                time.sleep(check_interval)
+                elapsed += check_interval
+                
+                # Check VM status
+                status_result = self.mininet_client.get_status()
+                
+                if status_result['success']:
+                    status = status_result['data']
+                    
+                    # If simulation is no longer active, it's complete
+                    if not status.get('active', False):
+                        logger.info("VM simulation completed")
+                        break
+                
+                # Emit progress update
+                progress = min(100, int((elapsed / duration) * 100))
+                socketio.emit('mininet_progress', {
+                    'progress': progress,
+                    'elapsed': elapsed,
+                    'duration': duration
+                })
             
-            # Simulation completed
-            if self.mininet_active:  # Only if not stopped manually
+            # Simulation completed - download PCAP files
+            logger.info("Downloading PCAP files from VM...")
+            
+            pcaps_result = self.mininet_client.list_pcaps()
+            
+            if pcaps_result['success'] and pcaps_result['data']['pcaps']:
+                # Get the most recent PCAP
+                pcaps = pcaps_result['data']['pcaps']
+                latest_pcap = pcaps[0]  # Already sorted by creation time
+                
+                # Download to local directory
+                local_pcap_dir = os.path.join(
+                    os.path.dirname(__file__),
+                    '../../mininet_data_generation/data_capture/pcaps'
+                )
+                os.makedirs(local_pcap_dir, exist_ok=True)
+                
+                local_pcap_path = os.path.join(local_pcap_dir, latest_pcap['filename'])
+                
+                download_result = self.mininet_client.download_pcap(
+                    latest_pcap['filename'],
+                    local_pcap_path
+                )
+                
+                if download_result['success']:
+                    logger.info(f"PCAP downloaded: {local_pcap_path}")
+                    
+                    # Process PCAP for alerts
+                    self._process_pcap_for_alerts(local_pcap_path)
+                else:
+                    logger.error(f"Failed to download PCAP: {download_result.get('message')}")
+            
+            # Update state
+            if self.mininet_active:
                 self.mininet_active = False
                 self.mininet_process = None
                 
-                logger.info("PCAP replay simulation completed")
-                
-                # Emit completion event and trigger dashboard refresh
+                # Emit completion event
                 socketio.emit('mininet_simulation_completed', {
                     'mode': self.mininet_mode,
                     'simulation': self.current_simulation,
-                    'duration': duration,
-                    'pcap_file': pcap_file
+                    'duration': duration
                 })
                 
-                # Also emit a stats update to refresh dashboard
+                # Emit stats update
                 updated_stats = self.get_system_stats()
                 socketio.emit('stats_update', updated_stats)
             
         except Exception as e:
-            logger.error(f"Error in PCAP replay simulation: {e}")
+            logger.error(f"Error monitoring VM simulation: {e}")
             self.mininet_active = False
             self.mininet_process = None
     
@@ -1057,13 +1121,33 @@ class SOCDashboardAPI:
                 logger.warning(f"PCAP file not found: {pcap_file}, trying normal traffic PCAP")
                 pcap_file = self._get_fallback_pcap_file()
             
+            # Determine expected traffic type from simulation mode
+            is_attack_simulation = (self.mininet_mode == 'attack' or 
+                                   self.current_simulation not in ['normal_traffic', None])
+            
             # Extract features from actual PCAP file
             network_data = self._extract_features_from_pcap(pcap_file)
             
             if not network_data:
-                logger.warning(f"No IPv4 data in PCAP: {pcap_file}, trying normal traffic PCAP")
-                pcap_file = self._get_fallback_pcap_file()
-                network_data = self._extract_features_from_pcap(pcap_file)
+                logger.warning(f"No IPv4 data in PCAP: {pcap_file}")
+                
+                # For attack simulations, try to find attack-specific PCAP
+                if is_attack_simulation and self.current_simulation:
+                    attack_pcap_dir = os.path.join(
+                        os.path.dirname(__file__),
+                        '../../mininet_data_generation/data_capture/mininet'
+                    )
+                    attack_pcap = os.path.join(attack_pcap_dir, f'{self.current_simulation}.pcap')
+                    
+                    if os.path.exists(attack_pcap) and attack_pcap != pcap_file:
+                        logger.info(f"Trying attack-specific PCAP: {attack_pcap}")
+                        network_data = self._extract_features_from_pcap(attack_pcap)
+                
+                # If still no data, fall back to normal traffic PCAP
+                if not network_data:
+                    logger.warning("Falling back to normal traffic PCAP")
+                    pcap_file = self._get_fallback_pcap_file()
+                    network_data = self._extract_features_from_pcap(pcap_file)
                 
             if not network_data:
                 logger.error("No usable PCAP files found, using synthetic data as last resort")
