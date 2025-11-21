@@ -213,24 +213,33 @@ class PCAPPreprocessor:
         return features_list
     
     def extract_flow_features(self, flow):
-        """Extract ML features from flow"""
+        """Extract ML features from flow - ALIGNED WITH TRAINED MODEL (24 features)"""
         features = {}
         
         # Basic flow features
-        duration = flow['end_time'] - flow['start_time'] if flow['end_time'] else 0
+        duration = flow['end_time'] - flow['start_time'] if flow['end_time'] else 0.1
+        packet_count = len(flow['packets'])
+        byte_count = flow['bytes']
+        
+        # Feature 1: index (placeholder for flow ID)
+        features['index'] = 0
+        
+        # Feature 2: duration
         features['duration'] = duration
-        features['packet_count'] = len(flow['packets'])
-        features['byte_count'] = flow['bytes']
         
-        # Rate features
-        if duration > 0:
-            features['packets_per_sec'] = len(flow['packets']) / duration
-            features['bytes_per_sec'] = flow['bytes'] / duration
-        else:
-            features['packets_per_sec'] = 0
-            features['bytes_per_sec'] = 0
+        # Features 3-4: ports
+        features['src_port'] = flow['src_port'] if flow['src_port'] else 0
+        features['dst_port'] = flow['dst_port'] if flow['dst_port'] else 0
         
-        # Packet size statistics
+        # Features 5-6: counts
+        features['packet_count'] = packet_count
+        features['byte_count'] = byte_count
+        
+        # Features 7-8: rates
+        features['packets_per_sec'] = packet_count / duration if duration > 0 else 0
+        features['bytes_per_sec'] = byte_count / duration if duration > 0 else 0
+        
+        # Features 9-12: packet size statistics
         if flow['packet_sizes']:
             features['mean_packet_size'] = np.mean(flow['packet_sizes'])
             features['std_packet_size'] = np.std(flow['packet_sizes'])
@@ -242,19 +251,15 @@ class PCAPPreprocessor:
             features['min_packet_size'] = 0
             features['max_packet_size'] = 0
         
-        # Inter-arrival time statistics
+        # Features 13-14: inter-arrival time statistics
         if flow['inter_arrival_times']:
-            features['mean_iat'] = np.mean(flow['inter_arrival_times'])
-            features['std_iat'] = np.std(flow['inter_arrival_times'])
-            features['min_iat'] = np.min(flow['inter_arrival_times'])
-            features['max_iat'] = np.max(flow['inter_arrival_times'])
+            features['mean_inter_arrival_time'] = np.mean(flow['inter_arrival_times'])
+            features['std_inter_arrival_time'] = np.std(flow['inter_arrival_times'])
         else:
-            features['mean_iat'] = 0
-            features['std_iat'] = 0
-            features['min_iat'] = 0
-            features['max_iat'] = 0
+            features['mean_inter_arrival_time'] = 0
+            features['std_inter_arrival_time'] = 0
         
-        # TCP flag counts
+        # Features 15-20: TCP flag counts
         features['syn_count'] = flow['syn_count']
         features['fin_count'] = flow['fin_count']
         features['rst_count'] = flow['rst_count']
@@ -262,29 +267,18 @@ class PCAPPreprocessor:
         features['ack_count'] = flow['ack_count']
         features['urg_count'] = flow['urg_count']
         
-        # TCP flag ratios
-        if features['packet_count'] > 0:
-            features['syn_ratio'] = flow['syn_count'] / features['packet_count']
-            features['fin_ratio'] = flow['fin_count'] / features['packet_count']
-            features['rst_ratio'] = flow['rst_count'] / features['packet_count']
+        # Features 21-23: TCP flag ratios
+        if packet_count > 0:
+            features['syn_ratio'] = flow['syn_count'] / packet_count
+            features['fin_ratio'] = flow['fin_count'] / packet_count
+            features['rst_ratio'] = flow['rst_count'] / packet_count
         else:
             features['syn_ratio'] = 0
             features['fin_ratio'] = 0
             features['rst_ratio'] = 0
         
-        # Protocol
-        features['protocol'] = flow['protocol'] if flow['protocol'] else 0
-        
-        # Port features (for well-known ports)
-        features['src_port'] = flow['src_port'] if flow['src_port'] else 0
-        features['dst_port'] = flow['dst_port'] if flow['dst_port'] else 0
-        
-        # Well-known port indicators
-        well_known_ports = [20, 21, 22, 23, 25, 53, 80, 110, 143, 443, 3306, 3389, 8080]
-        features['is_well_known_port'] = 1 if (
-            flow['src_port'] in well_known_ports or 
-            flow['dst_port'] in well_known_ports
-        ) else 0
+        # Feature 24: well-known port indicator
+        features['is_well_known_port'] = 1 if (features['dst_port'] < 1024) else 0
         
         return features
     
