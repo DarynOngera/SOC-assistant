@@ -17,8 +17,8 @@ import AuditLogs from './components/AuditLogs';
 import AuditExport from './components/AuditExport';
 import CSVAnalysis from './components/CSVAnalysis';
 import NetworkMap from './components/NetworkMap';
-import MininetSimulation from './components/MininetSimulation';
-import { Shield, Activity, AlertTriangle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target, Network, Menu, X, Download, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
+import SimulationControl from './components/SimulationControl';
+import { Shield, Activity, AlertTriangle, Users, Settings, FileText, LogOut, Upload, TrendingUp, Target, Network, Menu, X, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -41,6 +41,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [simulationNotification, setSimulationNotification] = useState(null);
 
   useEffect(() => {
     // Check for existing authentication
@@ -86,6 +87,15 @@ function App() {
     newSocket.on('new_alerts', (data) => {
       setAlerts(prevAlerts => [...data.alerts, ...prevAlerts].slice(0, 100));
       setStats(data.stats);
+      
+      // Show notification if from simulation
+      if (data.source === 'mininet_simulation' && data.alerts.length > 0) {
+        setSimulationNotification({
+          type: 'success',
+          message: `🚨 Simulation generated ${data.alerts.length} new alerts!`
+        });
+        setTimeout(() => setSimulationNotification(null), 4000);
+      }
     });
 
     newSocket.on('stats_update', (data) => {
@@ -95,6 +105,15 @@ function App() {
     newSocket.on('alerts_update', (data) => {
       setAlerts(data.alerts);
       setStats(data.stats);
+    });
+
+    // Listen for simulation notifications
+    newSocket.on('alert_batch_generated', (data) => {
+      setSimulationNotification({
+        type: 'success',
+        message: `🚨 ${data.count} alerts detected from ${data.simulation || 'simulation'}!`
+      });
+      setTimeout(() => setSimulationNotification(null), 4000);
     });
 
     // Request initial data
@@ -236,7 +255,6 @@ function App() {
     const navItems = [
       { id: 'dashboard', label: 'Dashboard', icon: Activity, roles: ['admin', 'analyst'] },
       { id: 'network-map', label: 'Network Map', icon: Network, roles: ['admin', 'analyst'] },
-      { id: 'mininet-simulation', label: 'Mininet Simulation', icon: Zap, roles: ['admin'] },
       { id: 'threat-analysis', label: 'Threat Analysis', icon: TrendingUp, roles: ['admin', 'analyst'] },
       { id: 'threat-triage', label: 'Threat Triage', icon: Target, roles: ['admin', 'analyst'] },
       { id: 'csv-analysis', label: 'CSV Analysis', icon: Upload, roles: ['admin', 'analyst'] },
@@ -405,8 +423,6 @@ function App() {
     switch (currentView) {
       case 'network-map':
         return <NetworkMap />;
-      case 'mininet-simulation':
-        return user.role === 'admin' ? <MininetSimulation /> : null;
       case 'threat-analysis':
         return (
           <div className="space-y-8">
@@ -470,7 +486,7 @@ function App() {
             </div>
 
             {/* Controls and Visualizations */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-8">
               {/* Threshold Control */}
               <div className="card">
                 <ThresholdControl
@@ -483,6 +499,11 @@ function App() {
               <div className="card">
                 <ScoreDistribution />
               </div>
+
+              {/* Simulation Control - Admin Only */}
+              {user.role === 'admin' && (
+                <SimulationControl />
+              )}
             </div>
 
             {/* Enhanced Dashboard with Quick Threat Overview */}
@@ -538,6 +559,19 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900 lg:flex">
       {renderSidebar()}
       {renderTopBar()}
+      
+      {/* Global Simulation Notification */}
+      {simulationNotification && (
+        <div className="fixed top-20 right-4 z-50 animate-slide-in">
+          <div className={`p-4 rounded-lg shadow-2xl border-2 ${
+            simulationNotification.type === 'success' 
+              ? 'bg-green-900/90 border-green-500 text-green-100' 
+              : 'bg-red-900/90 border-red-500 text-red-100'
+          } backdrop-blur-sm`}>
+            <p className="font-bold text-lg">{simulationNotification.message}</p>
+          </div>
+        </div>
+      )}
       
       <div className="flex-1 flex flex-col">
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 backdrop-blur-sm">

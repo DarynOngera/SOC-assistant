@@ -10,8 +10,11 @@ import {
   Activity,
   Zap,
   Network,
-  Target
+  Target,
+  CheckCircle,
+  Brain
 } from 'lucide-react';
+import io from 'socket.io-client';
 
 const MininetSimulation = () => {
   const [simulationStatus, setSimulationStatus] = useState({
@@ -30,20 +33,58 @@ const MininetSimulation = () => {
   const [selectedAttack, setSelectedAttack] = useState('syn_flood');
   const [duration, setDuration] = useState(5);
   const [showSettings, setShowSettings] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
     fetchSimulationStatus();
     fetchAvailableAttacks();
     
-    // Poll status every 2 seconds when simulation is active
-    const interval = setInterval(() => {
-      if (simulationStatus.active) {
-        fetchSimulationStatus();
-      }
-    }, 2000);
+    // Initialize WebSocket connection
+    const newSocket = io('http://localhost:5000');
+    setSocket(newSocket);
     
-    return () => clearInterval(interval);
-  }, [simulationStatus.active]);
+    // Listen for progress updates
+    newSocket.on('mininet_progress', (data) => {
+      console.log('Progress update:', data);
+      setProgress(data.progress);
+      setProgressMessage(data.message);
+    });
+    
+    // Listen for completion
+    newSocket.on('mininet_complete', (data) => {
+      console.log('Simulation complete:', data);
+      setSimulationStatus(prev => ({
+        ...prev,
+        active: false,
+        elapsed: prev.duration,
+        remaining: 0
+      }));
+      setProgress(100);
+      setProgressMessage('Simulation completed!');
+      alert(`✅ ${data.message}`);
+      
+      // Reset progress after a delay
+      setTimeout(() => {
+        setProgress(0);
+        setProgressMessage('');
+      }, 3000);
+    });
+    
+    // Listen for errors
+    newSocket.on('mininet_error', (data) => {
+      console.error('Simulation error:', data);
+      setSimulationStatus(prev => ({ ...prev, active: false }));
+      setProgress(0);
+      setProgressMessage('');
+      alert(`❌ Error: ${data.message}`);
+    });
+    
+    return () => {
+      newSocket.disconnect();
+    };
+  }, []);
 
   const fetchSimulationStatus = async () => {
     try {
@@ -80,6 +121,9 @@ const MininetSimulation = () => {
 
   const startSimulation = async () => {
     setLoading(true);
+    setProgress(0);
+    setProgressMessage('Starting PCAP replay...');
+    
     try {
       const token = localStorage.getItem('access_token');
       const response = await fetch('http://localhost:5000/api/mininet/start', {
@@ -109,55 +153,25 @@ const MininetSimulation = () => {
         });
         
         // Show success message
-        alert(`${selectedMode === 'attack' ? selectedAttack.replace('_', ' ').toUpperCase() : 'Normal'} simulation started!`);
-        
-        // Start progress simulation
-        simulateProgress();
+        const modeText = selectedMode === 'attack' 
+          ? `${selectedAttack.replace('_', ' ').toUpperCase()} attack` 
+          : 'Normal traffic';
+        alert(`🎬 ${modeText} PCAP replay started! Processing with trained ML model...`);
       } else {
         alert(`Failed to start simulation: ${result.message}`);
+        setProgress(0);
+        setProgressMessage('');
       }
     } catch (error) {
       console.error('Error starting simulation:', error);
       alert('Error starting simulation');
+      setProgress(0);
+      setProgressMessage('');
     } finally {
       setLoading(false);
     }
   };
   
-  const simulateProgress = () => {
-    let elapsed = 0;
-    const interval = setInterval(() => {
-      elapsed += 1;
-      
-      setSimulationStatus(prev => {
-        if (!prev.active || elapsed >= 5) {  // Complete after 5 seconds regardless of duration
-          clearInterval(interval);
-          // Simulation completed
-          setTimeout(() => {
-            setSimulationStatus(prevStatus => ({
-              ...prevStatus,
-              active: false,
-              elapsed: prevStatus.duration,
-              remaining: 0
-            }));
-            alert(`Simulation completed! Check the Dashboard for new alerts.`);
-          }, 500);
-          
-          return {
-            ...prev,
-            elapsed: prev.duration,
-            remaining: 0
-          };
-        }
-        
-        return {
-          ...prev,
-          elapsed: elapsed,
-          remaining: Math.max(0, 5 - elapsed)  // Show countdown from 5 seconds
-        };
-      });
-    }, 1000);  // Update every second
-  };
 
   const stopSimulation = async () => {
     setLoading(true);
@@ -328,18 +342,19 @@ const MininetSimulation = () => {
           )}
         </div>
 
-        {simulationStatus.active && (
+        {(simulationStatus.active || progress > 0) && (
           <div className="mt-4">
             <div className="flex justify-between text-sm text-gray-400 mb-2">
-              <span>Progress</span>
-              <span>{formatTime(simulationStatus.elapsed)} / {formatTime(simulationStatus.duration)}</span>
+              <span className="flex items-center gap-2">
+                <Brain className="h-4 w-4 text-purple-400" />
+                {progressMessage || 'Processing with ML model...'}
+              </span>
+              <span>{progress}%</span>
             </div>
             <div className="w-full bg-gray-700 rounded-full h-2">
               <div 
-                className="bg-blue-600 h-2 rounded-full transition-all duration-1000"
-                style={{ 
-                  width: `${(simulationStatus.elapsed / simulationStatus.duration) * 100}%` 
-                }}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${progress}%` }}
               ></div>
             </div>
           </div>
@@ -487,20 +502,50 @@ const MininetSimulation = () => {
         </div>
       )}
 
-      {/* Requirements Notice */}
-      <div className="bg-yellow-900 border border-yellow-600 p-4 rounded-lg">
+      {/* PCAP Replay Info */}
+      <div className="bg-blue-900 border border-blue-600 p-4 rounded-lg">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-yellow-400 mt-0.5" />
+          <Brain className="h-5 w-5 text-blue-400 mt-0.5" />
           <div>
-            <h4 className="font-semibold text-yellow-200 mb-2">System Requirements</h4>
-            <ul className="text-sm text-yellow-300 space-y-1">
-              <li>• Mininet must be installed and accessible via sudo</li>
-              <li>• Root privileges required for network simulation</li>
-              <li>• Ensure no other Mininet processes are running</li>
-              <li>• Network tools (hping3, nmap, tcpdump) should be installed</li>
+            <h4 className="font-semibold text-blue-200 mb-2">🎬 PCAP Replay Mode with Trained ML Model</h4>
+            <ul className="text-sm text-blue-300 space-y-1">
+              <li>• <strong>Normal Traffic:</strong> Replays real network PCAP files (web browsing, SSH, DNS, etc.)</li>
+              <li>• <strong>Attack Traffic:</strong> Replays attack PCAPs (SYN flood, port scan, UDP flood, etc.)</li>
+              <li>• <strong>ML Detection:</strong> Uses trained Random Forest model (95.25% accuracy) to detect anomalies</li>
+              <li>• <strong>Instant Results:</strong> Processes PCAP in 5-10 seconds and generates real alerts</li>
+              <li>• <strong>Model Features:</strong> Analyzes 24 network features (ACK count, ports, packet sizes, etc.)</li>
             </ul>
           </div>
         </div>
+      </div>
+      
+      {/* Model Performance */}
+      <div className="bg-gray-800 p-6 rounded-lg">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <CheckCircle className="h-5 w-5 text-green-400" />
+          Trained Model Performance
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gray-700 p-4 rounded">
+            <p className="text-sm text-gray-400">Accuracy</p>
+            <p className="text-2xl font-bold text-green-400">95.25%</p>
+          </div>
+          <div className="bg-gray-700 p-4 rounded">
+            <p className="text-sm text-gray-400">Precision</p>
+            <p className="text-2xl font-bold text-blue-400">98.84%</p>
+          </div>
+          <div className="bg-gray-700 p-4 rounded">
+            <p className="text-sm text-gray-400">Recall</p>
+            <p className="text-2xl font-bold text-purple-400">95.53%</p>
+          </div>
+          <div className="bg-gray-700 p-4 rounded">
+            <p className="text-sm text-gray-400">F1 Score</p>
+            <p className="text-2xl font-bold text-yellow-400">97.16%</p>
+          </div>
+        </div>
+        <p className="text-sm text-gray-400 mt-4">
+          Model trained on 3,156 network flows with 5 attack types and 5 normal traffic patterns.
+        </p>
       </div>
     </div>
   );

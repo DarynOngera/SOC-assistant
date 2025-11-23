@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Shield, AlertTriangle, TrendingUp, Activity } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 const AttackDistribution = () => {
   const [distributionData, setDistributionData] = useState(null);
@@ -41,7 +42,32 @@ const AttackDistribution = () => {
   useEffect(() => {
     fetchDistributionData();
     const interval = setInterval(fetchDistributionData, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
+    
+    // Set up WebSocket listener for real-time updates
+    const socket = io('http://localhost:5000');
+    
+    // Listen for new alerts and update distribution immediately
+    socket.on('new_alerts', (data) => {
+      console.log('AttackDistribution: Received new alerts, refreshing...');
+      fetchDistributionData();
+    });
+    
+    // Listen for alerts updates
+    socket.on('alerts_update', (data) => {
+      console.log('AttackDistribution: Alerts updated, refreshing...');
+      fetchDistributionData();
+    });
+    
+    // Listen for batch alerts from simulation
+    socket.on('alert_batch_generated', (data) => {
+      console.log('AttackDistribution: Batch alerts generated, refreshing...');
+      fetchDistributionData();
+    });
+    
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, []);
 
   if (loading) {
