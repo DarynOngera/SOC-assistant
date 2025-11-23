@@ -1,22 +1,84 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { TrendingUp, BarChart3 } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 const ScoreDistribution = () => {
   const [distributionData, setDistributionData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [chartType, setChartType] = useState('bar');
+  const [isLiveMode, setIsLiveMode] = useState(true); // Always start in live mode
+  const [simulationActive, setSimulationActive] = useState(false);
+  const [hasData, setHasData] = useState(false);
 
   useEffect(() => {
-    fetchDistributionData();
-    const interval = setInterval(fetchDistributionData, 10000); // Update every 10 seconds
-    return () => clearInterval(interval);
-  }, []);
+    // Start with live endpoint (will be empty initially)
+    fetchLiveDistributionData();
+    const interval = setInterval(fetchLiveDistributionData, 10000); // Check for updates every 10 seconds
+    
+    // Set up WebSocket listener for real-time updates
+    const socket = io('http://localhost:5000');
+    
+    // Listen for batch alerts from simulation
+    socket.on('alert_batch_generated', (data) => {
+      console.log('ScoreDistribution: Batch alerts generated, refreshing...');
+      fetchLiveDistributionData();
+    });
+    
+    // Listen for live score distribution updates
+    socket.on('live_score_distribution', (data) => {
+      console.log('ScoreDistribution: Received live score distribution');
+      if (isLiveMode) {
+        updateChartData(data);
+      }
+      setSimulationActive(data.simulation_active);
+    });
+    
+    // Listen for simulation start
+    socket.on('simulation_started', (data) => {
+      console.log('ScoreDistribution: Simulation started');
+      setSimulationActive(true);
+      setHasData(false); // Will populate as simulation runs
+    });
+    
+    // Listen for simulation complete
+    socket.on('mininet_complete', (data) => {
+      console.log('ScoreDistribution: Simulation complete, showing final results');
+      setSimulationActive(false);
+      fetchLiveDistributionData(); // Get final distribution
+    });
+    
+    // Listen for simulation stopped
+    socket.on('simulation_stopped', (data) => {
+      console.log('ScoreDistribution: Simulation stopped');
+      setSimulationActive(false);
+    });
+    
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
+  }, []); // Empty dependency array - setup once on mount
 
-  const fetchDistributionData = async () => {
+  const updateChartData = (data) => {
+    // Check if we have data
+    const hasDataFlag = data.has_data !== undefined ? data.has_data : (data.bins && data.bins.length > 0);
+    setHasData(hasDataFlag);
+    
+    // Transform data for chart (will be empty array if no data)
+    const chartData = data.bins.map((bin, index) => ({
+      score: bin.toFixed(2),
+      count: data.counts[index],
+      range: `${(bin - 0.025).toFixed(2)}-${(bin + 0.025).toFixed(2)}`
+    }));
+    setDistributionData(chartData);
+    setLoading(false);
+  };
+
+  const fetchLiveDistributionData = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://localhost:5000/api/score-distribution', {
+      const response = await fetch('http://localhost:5000/api/score-distribution/live', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -24,20 +86,11 @@ const ScoreDistribution = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        
-        // Transform data for chart
-        const chartData = data.bins.map((bin, index) => ({
-          score: bin.toFixed(2),
-          count: data.counts[index],
-          range: `${(bin - 0.025).toFixed(2)}-${(bin + 0.025).toFixed(2)}`
-        }));
-        
-        setDistributionData(chartData);
+        updateChartData(data);
+        setSimulationActive(data.simulation_active);
       }
     } catch (error) {
-      console.error('Error fetching distribution data:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error fetching live distribution data:', error);
     }
   };
 
@@ -74,6 +127,11 @@ const ScoreDistribution = () => {
         <div className="flex items-center space-x-2">
           <BarChart3 className="h-5 w-5 text-gray-400" />
           <h3 className="text-lg font-semibold text-white">Score Distribution</h3>
+          {isLiveMode && (
+            <span className="ml-2 px-2 py-1 bg-green-500/20 border border-green-500/50 rounded text-xs text-green-300 font-bold animate-pulse">
+              {simulationActive ? '🔴 LIVE' : '📊 LIVE RESULTS'}
+            </span>
+          )}
         </div>
         <div className="flex space-x-2">
           <button
@@ -99,10 +157,23 @@ const ScoreDistribution = () => {
         </div>
       </div>
 
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          {chartType === 'bar' ? (
-            <BarChart data={distributionData}>
+      {/* Empty state message */}
+      {!hasData && !simulationActive && (
+        <div className="h-64 flex items-center justify-center bg-slate-800/30 rounded-lg border border-slate-700/50">
+          <div className="text-center">
+            <BarChart3 className="h-12 w-12 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-400 text-sm">No simulation data yet</p>
+            <p className="text-gray-500 text-xs mt-1">Run a simulation to see score distribution</p>
+          </div>
+        </div>
+      )}
+
+      {/* Chart (shown when we have data or simulation is active) */}
+      {(hasData || simulationActive) && (
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            {chartType === 'bar' ? (
+              <BarChart data={distributionData}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
               <XAxis 
                 dataKey="score" 
@@ -117,9 +188,17 @@ const ScoreDistribution = () => {
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }} />
               <Bar 
                 dataKey="count" 
-                fill="#3b82f6"
                 radius={[8, 8, 0, 0]}
-              />
+              >
+                {distributionData.map((entry, index) => {
+                  const score = parseFloat(entry.score);
+                  let fill = '#10b981'; // Green for low scores (normal)
+                  if (score >= 0.8) fill = '#ef4444'; // Red for critical
+                  else if (score >= 0.6) fill = '#f59e0b'; // Orange for high
+                  else if (score >= 0.3) fill = '#eab308'; // Yellow for medium
+                  return <Cell key={`cell-${index}`} fill={fill} />;
+                })}
+              </Bar>
             </BarChart>
           ) : (
             <LineChart data={distributionData}>
@@ -146,35 +225,64 @@ const ScoreDistribution = () => {
             </LineChart>
           )}
         </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Color Legend - only show if we have data */}
+      {hasData && (
+        <>
+      <div className="flex flex-wrap gap-3 justify-center pt-3 border-t border-slate-700/50">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+          <span className="text-xs text-gray-400">Normal (0.0-0.3)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+          <span className="text-xs text-gray-400">Medium (0.3-0.6)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+          <span className="text-xs text-gray-400">High (0.6-0.8)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+          <span className="text-xs text-gray-400">Critical (0.8+)</span>
+        </div>
       </div>
 
       {/* Distribution Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-700/50">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-success-600">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+        <div className="text-center p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+          <div className="text-2xl font-bold text-green-400">
             {distributionData.filter(d => parseFloat(d.score) < 0.3).reduce((sum, d) => sum + d.count, 0)}
           </div>
-          <div className="text-xs text-gray-400">Low Risk (0.0-0.3)</div>
+          <div className="text-xs text-gray-400 mt-1">Normal Traffic</div>
+          <div className="text-xs text-green-400">Low Risk</div>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-yellow-600">
+        <div className="text-center p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <div className="text-2xl font-bold text-yellow-400">
             {distributionData.filter(d => parseFloat(d.score) >= 0.3 && parseFloat(d.score) < 0.6).reduce((sum, d) => sum + d.count, 0)}
           </div>
-          <div className="text-xs text-gray-400">Medium Risk (0.3-0.6)</div>
+          <div className="text-xs text-gray-400 mt-1">Suspicious</div>
+          <div className="text-xs text-yellow-400">Medium Risk</div>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-warning-600">
+        <div className="text-center p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+          <div className="text-2xl font-bold text-orange-400">
             {distributionData.filter(d => parseFloat(d.score) >= 0.6 && parseFloat(d.score) < 0.8).reduce((sum, d) => sum + d.count, 0)}
           </div>
-          <div className="text-xs text-gray-400">High Risk (0.6-0.8)</div>
+          <div className="text-xs text-gray-400 mt-1">Likely Attack</div>
+          <div className="text-xs text-orange-400">High Risk</div>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-danger-600">
+        <div className="text-center p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <div className="text-2xl font-bold text-red-400">
             {distributionData.filter(d => parseFloat(d.score) >= 0.8).reduce((sum, d) => sum + d.count, 0)}
           </div>
-          <div className="text-xs text-gray-400">Critical (0.8+)</div>
+          <div className="text-xs text-gray-400 mt-1">Confirmed Attack</div>
+          <div className="text-xs text-red-400">Critical</div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };

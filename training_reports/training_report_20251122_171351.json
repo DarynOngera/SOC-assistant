@@ -1,0 +1,175 @@
+{
+  "timestamp": "20251122_171351",
+  "model_config": {
+    "n_estimators": 100,
+    "max_depth": 10,
+    "min_samples_split": 10,
+    "min_samples_leaf": 4,
+    "class_weight": "balanced"
+  },
+  "cross_validation": {
+    "accuracy": {
+      "mean": 0.9471681255322416,
+      "std": 0.007515393556248966,
+      "scores": [
+        0.9525065963060686,
+        0.9551451187335093,
+        0.9445910290237467,
+        0.9497354497354498,
+        0.9338624338624338
+      ]
+    },
+    "precision": {
+      "mean": 0.9803525113058361,
+      "std": 0.004793352761944225,
+      "scores": [
+        0.975,
+        0.9810725552050473,
+        0.9870550161812298,
+        0.9749216300940439,
+        0.9837133550488599
+      ]
+    },
+    "recall": {
+      "mean": 0.9571428571428571,
+      "std": 0.012328840522533685,
+      "scores": [
+        0.968944099378882,
+        0.9658385093167702,
+        0.9472049689440993,
+        0.9658385093167702,
+        0.937888198757764
+      ]
+    },
+    "f1": {
+      "mean": 0.968538245440991,
+      "std": 0.004702516787507876,
+      "scores": [
+        0.9719626168224299,
+        0.97339593114241,
+        0.9667194928684627,
+        0.9703588143525741,
+        0.9602543720190779
+      ]
+    }
+  },
+  "validation_performance": {
+    "accuracy": 0.9461172741679873,
+    "precision": 0.9808795411089866,
+    "recall": 0.9553072625698324,
+    "f1": 0.9679245283018868,
+    "roc_auc": 0.9909366456674195
+  },
+  "test_performance": {
+    "accuracy": 0.9525316455696202,
+    "precision": 0.9884393063583815,
+    "recall": 0.9553072625698324,
+    "f1": 0.9715909090909091,
+    "roc_auc": 0.9917769283544056
+  },
+  "confusion_matrix": {
+    "validation": [
+      [
+        84,
+        10
+      ],
+      [
+        24,
+        513
+      ]
+    ],
+    "test": [
+      [
+        89,
+        6
+      ],
+      [
+        24,
+        513
+      ]
+    ]
+  },
+  "feature_importance": [
+    {
+      "feature": "ack_count",
+      "importance": 0.21054703937172092
+    },
+    {
+      "feature": "src_port",
+      "importance": 0.1957280345468537
+    },
+    {
+      "feature": "dst_port",
+      "importance": 0.1135189465468145
+    },
+    {
+      "feature": "psh_count",
+      "importance": 0.07486909591530701
+    },
+    {
+      "feature": "byte_count",
+      "importance": 0.0692747911679656
+    },
+    {
+      "feature": "mean_packet_size",
+      "importance": 0.06808393642209148
+    },
+    {
+      "feature": "min_packet_size",
+      "importance": 0.0643695630591783
+    },
+    {
+      "feature": "max_packet_size",
+      "importance": 0.05515903602489353
+    },
+    {
+      "feature": "syn_count",
+      "importance": 0.025411727848083807
+    },
+    {
+      "feature": "syn_ratio",
+      "importance": 0.0251036650772508
+    },
+    {
+      "feature": "rst_count",
+      "importance": 0.021610157113370207
+    },
+    {
+      "feature": "std_inter_arrival_time",
+      "importance": 0.013715535337727394
+    },
+    {
+      "feature": "rst_ratio",
+      "importance": 0.013692088372209574
+    },
+    {
+      "feature": "is_well_known_port",
+      "importance": 0.013095388218348096
+    },
+    {
+      "feature": "packets_per_sec",
+      "importance": 0.010519109791207414
+    },
+    {
+      "feature": "packet_count",
+      "importance": 0.008195467941746271
+    },
+    {
+      "feature": "bytes_per_sec",
+      "importance": 0.007566907123797289
+    },
+    {
+      "feature": "duration",
+      "importance": 0.004927590852545189
+    },
+    {
+      "feature": "mean_inter_arrival_time",
+      "importance": 0.004611919268888836
+    },
+    {
+      "feature": "index",
+      "importance": 0.0
+    }
+  ],
+  "num_features": 24
+}

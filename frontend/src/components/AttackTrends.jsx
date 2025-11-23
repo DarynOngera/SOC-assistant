@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { TrendingUp, TrendingDown, Minus, Clock, AlertTriangle, Activity } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 const AttackTrends = () => {
   const [trendsData, setTrendsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [timeRange, setTimeRange] = useState(24); // hours
-  const [granularity, setGranularity] = useState('hour');
+  const [granularity, setGranularity] = useState('30min');
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('access_token');
@@ -46,7 +47,26 @@ const AttackTrends = () => {
 
   useEffect(() => {
     const interval = setInterval(fetchTrendsData, 60000); // Refresh every minute
-    return () => clearInterval(interval);
+    
+    // Set up WebSocket listener for real-time updates
+    const socket = io('http://localhost:5000');
+    
+    // Listen for new alerts and update trends immediately
+    socket.on('new_alerts', (data) => {
+      console.log('AttackTrends: Received new alerts, refreshing...');
+      fetchTrendsData();
+    });
+    
+    // Listen for batch alerts from simulation
+    socket.on('alert_batch_generated', (data) => {
+      console.log('AttackTrends: Batch alerts generated, refreshing...');
+      fetchTrendsData();
+    });
+    
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, [timeRange, granularity]);
 
   const getTrendIcon = (direction) => {
@@ -76,7 +96,7 @@ const AttackTrends = () => {
   };
 
   const formatTimestamp = (timestamp) => {
-    if (granularity === 'hour') {
+    if (granularity === '30min' || granularity === 'hour') {
       return new Date(timestamp).toLocaleTimeString('en-US', { 
         hour: '2-digit', 
         minute: '2-digit',
@@ -171,6 +191,7 @@ const AttackTrends = () => {
             onChange={(e) => setGranularity(e.target.value)}
             className="bg-slate-700/50 border border-slate-600/50 rounded-lg px-3 py-1 text-sm text-white focus:ring-2 focus:ring-blue-500 transition-all duration-200"
           >
+            <option value="30min">30 Minutes</option>
             <option value="hour">Hourly</option>
             <option value="day">Daily</option>
           </select>

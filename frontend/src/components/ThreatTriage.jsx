@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Shield, Clock, Target, TrendingUp, Eye, Flag, X, CheckCircle, 
          ArrowUp, UserPlus, Search, FileText, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 const ThreatTriage = () => {
   const [triageData, setTriageData] = useState(null);
@@ -141,8 +142,35 @@ const ThreatTriage = () => {
   useEffect(() => {
     fetchTriageData();
     fetchAnalysts();
+    
+    // Set up polling as fallback
     const interval = setInterval(fetchTriageData, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
+    
+    // Set up WebSocket for real-time updates
+    const socket = io('http://localhost:5000');
+    
+    // Listen for new alerts and update triage immediately
+    socket.on('new_alerts', (data) => {
+      console.log('ThreatTriage: Received new alerts, refreshing...');
+      fetchTriageData();
+    });
+    
+    // Listen for alerts updates
+    socket.on('alerts_update', (data) => {
+      console.log('ThreatTriage: Alerts updated, refreshing...');
+      fetchTriageData();
+    });
+    
+    // Listen for batch alerts from simulation
+    socket.on('alert_batch_generated', (data) => {
+      console.log('ThreatTriage: Batch alerts generated, refreshing...');
+      fetchTriageData();
+    });
+    
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, []);
 
   const getPriorityColor = (priority) => {

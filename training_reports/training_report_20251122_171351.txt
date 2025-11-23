@@ -1,0 +1,53 @@
+======================================================================
+MODEL TRAINING REPORT
+======================================================================
+
+Timestamp: 20251122_171351
+
+MODEL CONFIGURATION
+----------------------------------------------------------------------
+  n_estimators: 100
+  max_depth: 10
+  min_samples_split: 10
+  min_samples_leaf: 4
+  class_weight: balanced
+
+
+CROSS-VALIDATION RESULTS (5-fold)
+----------------------------------------------------------------------
+  Accuracy    : 0.9472 (+/- 0.0150)
+  Precision   : 0.9804 (+/- 0.0096)
+  Recall      : 0.9571 (+/- 0.0247)
+  F1          : 0.9685 (+/- 0.0094)
+
+
+VALIDATION PERFORMANCE
+----------------------------------------------------------------------
+  Accuracy    : 0.9461
+  Precision   : 0.9809
+  Recall      : 0.9553
+  F1          : 0.9679
+  Roc_auc     : 0.9909
+
+
+TEST PERFORMANCE (FINAL)
+----------------------------------------------------------------------
+  Accuracy    : 0.9525
+  Precision   : 0.9884
+  Recall      : 0.9553
+  F1          : 0.9716
+  Roc_auc     : 0.9918
+
+
+TOP 10 IMPORTANT FEATURES
+----------------------------------------------------------------------
+   1. ack_count                     : 0.2105
+   2. src_port                      : 0.1957
+   3. dst_port                      : 0.1135
+   4. psh_count                     : 0.0749
+   5. byte_count                    : 0.0693
+   6. mean_packet_size              : 0.0681
+   7. min_packet_size               : 0.0644
+   8. max_packet_size               : 0.0552
+   9. syn_count                     : 0.0254
+  10. syn_ratio                     : 0.0251
