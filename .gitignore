@@ -125,15 +125,11 @@ dmypy.json
 .pyre/
 
 # Project specific
-models/*.pkl
-models/*.h5
-models/*.png
-*.pdf
 node_modules/
 .DS_Store
 /data/raw/
 /models/checkpoints/
 /data 
 src/dashboard/data
-reports/
+
 
