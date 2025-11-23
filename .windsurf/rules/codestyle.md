@@ -1,5 +1,9 @@
 ---
-trigger: manual
+trigger: always_on
 ---
 
-refactor file contents instead of creating a new "enhanced" file for the same file.
+Refactor file contents instead of creating a new "enhanced" file for the same file.
+
+No need for mark down documentation with every change.
+
+Best practice for every system design.
