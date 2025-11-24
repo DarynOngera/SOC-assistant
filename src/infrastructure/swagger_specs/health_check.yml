@@ -1,0 +1,61 @@
+Health Check
+---
+tags:
+  - Health
+summary: Overall system health check
+description: |
+  Check the overall health status of the SOC Assistant system.
+  
+  Returns health status of:
+  - Database connectivity
+  - ML model availability
+  - Disk space
+  - System uptime
+  
+  **Authentication Required**: No (public endpoint)
+responses:
+  200:
+    description: Health check completed
+    schema:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: Overall system health status
+        timestamp:
+          type: string
+          format: date-time
+          description: Check timestamp
+        uptime_seconds:
+          type: number
+          description: System uptime in seconds
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [healthy, unhealthy]
+            ml_model:
+              type: string
+              enum: [healthy, unhealthy]
+            disk_space:
+              type: string
+              enum: [healthy, warning, critical]
+        monitoring:
+          type: string
+          description: Monitoring infrastructure status
+    examples:
+      application/json:
+        status: healthy
+        timestamp: "2025-11-24T01:30:00.000000"
+        uptime_seconds: 3600
+        checks:
+          database: healthy
+          ml_model: healthy
+          disk_space: healthy
+        monitoring: enabled
+  500:
+    description: Health check failed
+    schema:
+      $ref: '#/definitions/Error'
