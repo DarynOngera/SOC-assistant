@@ -80,6 +80,30 @@ except ImportError as e:
     print(f"⚠️  Monitoring not available: {e}")
     logger.warning(f"⚠ Monitoring not available: {e}")
 
+# Swagger API Documentation (optional)
+try:
+    from src.infrastructure.swagger_config import init_swagger
+    from flasgger import swag_from
+    SWAGGER_AVAILABLE = True
+    print("✅ Swagger documentation loaded")
+    logger.info("✓ Swagger documentation loaded")
+    
+    # Helper function for conditional Swagger decoration
+    def swagger_doc(spec_file):
+        """Conditionally apply Swagger documentation"""
+        return swag_from(spec_file)
+except ImportError as e:
+    SWAGGER_AVAILABLE = False
+    print(f"⚠️  Swagger not available: {e}")
+    logger.warning(f"⚠ Swagger not available: {e}")
+    
+    # No-op decorator when Swagger not available
+    def swagger_doc(spec_file):
+        """No-op decorator when Swagger not available"""
+        def decorator(f):
+            return f
+        return decorator
+
 # Reduce noise from external libraries
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 logging.getLogger('socketio').setLevel(logging.WARNING)
@@ -109,6 +133,17 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'soc-dashboard-secret-key-change-in-production')
 CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
 socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000"], logger=False, engineio_logger=False)
+
+# Initialize Swagger API documentation (optional)
+if SWAGGER_AVAILABLE:
+    try:
+        swagger = init_swagger(app)
+        print("✅ Swagger API documentation available at /api/docs")
+        logger.info("✓ Swagger API documentation available at /api/docs")
+    except Exception as e:
+        print(f"⚠️  Could not initialize Swagger: {e}")
+        logger.warning(f"⚠ Could not initialize Swagger: {e}")
+        SWAGGER_AVAILABLE = False
 
 # Initialize Prometheus metrics (optional)
 if MONITORING_AVAILABLE:
@@ -2307,7 +2342,48 @@ def check_mfa_requirement():
 @app.route('/api/auth/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def login():
-    """User login with optional MFA"""
+    """
+    User Login
+    ---
+    tags:
+      - Authentication
+    summary: Authenticate user and get JWT tokens
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - username
+            - password
+          properties:
+            username:
+              type: string
+              example: admin
+            password:
+              type: string
+              example: SecureAdmin123!
+            mfa_token:
+              type: string
+              example: "123456"
+    responses:
+      200:
+        description: Login successful
+        schema:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            user:
+              type: object
+            expires_in:
+              type: integer
+      401:
+        description: Authentication failed
+    """
     try:
         data = request.get_json()
         username = data.get('username')
@@ -2344,7 +2420,39 @@ def login():
 
 @app.route('/api/auth/refresh', methods=['POST'])
 def refresh_token():
-    """Refresh access token"""
+    """
+    Refresh Access Token
+    ---
+    tags:
+      - Authentication
+    summary: Refresh JWT access token using refresh token
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - refresh_token
+          properties:
+            refresh_token:
+              type: string
+              description: Valid refresh token
+    responses:
+      200:
+        description: Token refreshed successfully
+        schema:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            expires_in:
+              type: integer
+      401:
+        description: Invalid or expired refresh token
+    """
     try:
         data = request.get_json()
         refresh_token = data.get('refresh_token')
@@ -2369,7 +2477,20 @@ def refresh_token():
 @app.route('/api/auth/logout', methods=['POST'])
 @token_required
 def logout():
-    """User logout"""
+    """
+    User Logout
+    ---
+    tags:
+      - Authentication
+    summary: Logout current user
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Logged out successfully
+      401:
+        description: Unauthorized
+    """
     try:
         username = request.current_user['username']
         ip_address, _ = get_client_info()
@@ -2846,7 +2967,38 @@ def update_auth_preferences():
 @token_required
 @admin_required
 def get_users():
-    """Get all users (admin only)"""
+    """
+    List Users
+    ---
+    tags:
+      - Admin
+    summary: Get all users (admin only)
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Users retrieved successfully
+        schema:
+          type: object
+          properties:
+            users:
+              type: array
+              items:
+                type: object
+                properties:
+                  username:
+                    type: string
+                  email:
+                    type: string
+                  role:
+                    type: string
+                  active:
+                    type: boolean
+      401:
+        description: Unauthorized
+      403:
+        description: Forbidden - admin access required
+    """
     try:
         users = auth_manager.get_users()
         return jsonify({'users': users})
@@ -2858,7 +3010,49 @@ def get_users():
 @token_required
 @admin_required
 def create_user():
-    """Create new user (admin only)"""
+    """
+    Create User
+    ---
+    tags:
+      - Admin
+    summary: Create new user (admin only)
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - username
+            - password
+            - email
+            - role
+          properties:
+            username:
+              type: string
+              example: analyst1
+            password:
+              type: string
+              example: SecurePass123!
+            email:
+              type: string
+              example: analyst@soc.local
+            role:
+              type: string
+              enum: [super_admin, soc_manager, senior_analyst, analyst, viewer]
+              example: analyst
+    responses:
+      200:
+        description: User created successfully
+      400:
+        description: Invalid input or user already exists
+      401:
+        description: Unauthorized
+      403:
+        description: Forbidden - admin access required
+    """
     try:
         data = request.get_json()
         username = data.get('username')
@@ -3523,7 +3717,37 @@ def get_network_connections():
 @token_required
 @analyst_or_admin_required
 def get_alerts():
-    """Get alerts with filtering and pagination from MongoDB"""
+    """
+    Get Security Alerts
+    ---
+    tags:
+      - Alerts
+    summary: Retrieve security alerts with filtering and pagination
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: page
+        type: integer
+        default: 1
+      - in: query
+        name: per_page
+        type: integer
+        default: 20
+      - in: query
+        name: severity
+        type: string
+        enum: [critical, high, medium, low]
+      - in: query
+        name: status
+        type: string
+        enum: [new, flagged, dismissed]
+    responses:
+      200:
+        description: Alerts retrieved successfully
+      401:
+        description: Unauthorized
+    """
     try:
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 20))
@@ -3572,7 +3796,16 @@ if MONITORING_AVAILABLE:
 # Health check endpoints (no authentication required)
 @app.route('/health')
 def health():
-    """Overall health check"""
+    """
+    Health Check
+    ---
+    tags:
+      - Health
+    summary: Overall system health check
+    responses:
+      200:
+        description: Health check completed
+    """
     if MONITORING_AVAILABLE:
         return jsonify(health_check.run_checks())
     return jsonify({
@@ -3606,14 +3839,62 @@ def health_live():
 @token_required
 @analyst_or_admin_required
 def get_stats():
-    """Get system statistics"""
+    """
+    Get System Statistics
+    ---
+    tags:
+      - Statistics
+    summary: Get current system statistics and metrics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Statistics retrieved successfully
+      401:
+        description: Unauthorized
+    """
     return jsonify(dashboard_api.get_system_stats())
 
 @app.route('/api/threshold', methods=['GET', 'POST'])
 @token_required
 @analyst_or_admin_required
 def threshold():
-    """Get or update detection threshold"""
+    """
+    Detection Threshold
+    ---
+    tags:
+      - Configuration
+    summary: Get or update anomaly detection threshold
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        required: false
+        schema:
+          type: object
+          properties:
+            threshold:
+              type: number
+              format: float
+              minimum: 0.0
+              maximum: 1.0
+              example: 0.5
+    responses:
+      200:
+        description: Threshold retrieved or updated
+        schema:
+          type: object
+          properties:
+            threshold:
+              type: number
+            success:
+              type: boolean
+      400:
+        description: Invalid threshold value
+      401:
+        description: Unauthorized
+    """
     if request.method == 'POST':
         data = request.get_json()
         new_threshold = float(data.get('threshold', dashboard_api.threshold))
@@ -3629,7 +3910,28 @@ def threshold():
 @token_required
 @analyst_or_admin_required
 def flag_alert(alert_id):
-    """Flag an alert in MongoDB"""
+    """
+    Flag Alert
+    ---
+    tags:
+      - Alerts
+    summary: Flag an alert for review
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: alert_id
+        type: string
+        required: true
+        description: Alert ID
+    responses:
+      200:
+        description: Alert flagged successfully
+      404:
+        description: Alert not found
+      401:
+        description: Unauthorized
+    """
     try:
         username = request.current_user['username']
         
@@ -3672,7 +3974,28 @@ def flag_alert(alert_id):
 @token_required
 @analyst_or_admin_required
 def dismiss_alert(alert_id):
-    """Dismiss an alert in MongoDB"""
+    """
+    Dismiss Alert
+    ---
+    tags:
+      - Alerts
+    summary: Dismiss an alert as false positive
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: alert_id
+        type: string
+        required: true
+        description: Alert ID
+    responses:
+      200:
+        description: Alert dismissed successfully
+      404:
+        description: Alert not found
+      401:
+        description: Unauthorized
+    """
     try:
         print(f"DEBUG: dismiss_alert called with alert_id: {alert_id}")
         print(f"DEBUG: request.headers: {dict(request.headers)}")
@@ -4222,7 +4545,27 @@ def get_analysts():
 @token_required
 @analyst_or_admin_required
 def start_monitoring():
-    """Start real-time monitoring"""
+    """
+    Start Monitoring
+    ---
+    tags:
+      - Monitoring
+    summary: Start real-time network monitoring
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Monitoring started successfully
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            status:
+              type: string
+      401:
+        description: Unauthorized
+    """
     dashboard_api.start_monitoring()
     return jsonify({'success': True, 'status': 'monitoring_started'})
 
@@ -4230,7 +4573,27 @@ def start_monitoring():
 @token_required
 @analyst_or_admin_required
 def stop_monitoring():
-    """Stop real-time monitoring"""
+    """
+    Stop Monitoring
+    ---
+    tags:
+      - Monitoring
+    summary: Stop real-time network monitoring
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Monitoring stopped successfully
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            status:
+              type: string
+      401:
+        description: Unauthorized
+    """
     dashboard_api.stop_monitoring()
     return jsonify({'success': True, 'status': 'monitoring_stopped'})
 

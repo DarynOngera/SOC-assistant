@@ -1,0 +1,77 @@
+User Login
+---
+tags:
+  - Authentication
+summary: Authenticate user and get JWT tokens
+description: |
+  Authenticate with username and password. Returns JWT access and refresh tokens.
+  
+  **MFA Support**: If MFA is enabled for the user, include the `mfa_token` parameter.
+  
+  **Rate Limit**: 5 requests per minute
+parameters:
+  - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: admin
+          description: Username
+        password:
+          type: string
+          example: SecureAdmin123!
+          description: Password
+        mfa_token:
+          type: string
+          example: "123456"
+          description: MFA token (if MFA enabled)
+responses:
+  200:
+    description: Login successful
+    schema:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token (valid for 8 hours)
+        refresh_token:
+          type: string
+          description: JWT refresh token
+        user:
+          type: object
+          properties:
+            username:
+              type: string
+            email:
+              type: string
+            role:
+              type: string
+            mfa_enabled:
+              type: boolean
+        expires_in:
+          type: integer
+          example: 28800
+          description: Token expiration time in seconds
+  400:
+    description: Bad request - missing credentials
+    schema:
+      $ref: '#/definitions/Error'
+  401:
+    description: Authentication failed
+    schema:
+      type: object
+      properties:
+        error:
+          type: string
+        mfa_required:
+          type: boolean
+  429:
+    description: Rate limit exceeded
+    schema:
+      $ref: '#/definitions/Error'

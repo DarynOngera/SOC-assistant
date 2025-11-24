@@ -1,0 +1,49 @@
+Get System Statistics
+---
+tags:
+  - Statistics
+summary: Get current system statistics and metrics
+description: |
+  Retrieve comprehensive system statistics including:
+  - Total processed records
+  - Anomalies detected
+  - Alert counts and distribution
+  - System health status
+  - Detection threshold
+  
+  **Authentication Required**: Yes (Bearer token)
+  
+  **Permissions**: Analyst or Admin role required
+security:
+  - Bearer: []
+responses:
+  200:
+    description: Statistics retrieved successfully
+    schema:
+      $ref: '#/definitions/Stats'
+    examples:
+      application/json:
+        total_processed: 15420
+        anomalies_detected: 23
+        total_alerts: 156
+        active_alerts: 12
+        system_health: healthy
+        threshold: 0.5
+        severity_distribution:
+          critical: 2
+          high: 5
+          medium: 8
+          low: 8
+        detection_rate: 1.49
+  401:
+    description: Unauthorized - invalid or missing token
+    schema:
+      $ref: '#/definitions/Error'
+  403:
+    description: Forbidden - insufficient permissions
+    schema:
+      $ref: '#/definitions/Error'
+  500:
+    description: Internal server error
+    schema:
+      $ref: '#/definitions/Error'

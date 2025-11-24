@@ -1,0 +1,86 @@
+Get Security Alerts
+---
+tags:
+  - Alerts
+summary: Retrieve security alerts with filtering and pagination
+description: |
+  Get a paginated list of security alerts with optional filtering by severity and status.
+  
+  **Authentication Required**: Yes (Bearer token)
+  
+  **Permissions**: Analyst or Admin role required
+security:
+  - Bearer: []
+parameters:
+  - in: query
+    name: page
+    type: integer
+    default: 1
+    description: Page number
+  - in: query
+    name: per_page
+    type: integer
+    default: 20
+    description: Items per page
+  - in: query
+    name: severity
+    type: string
+    enum: [critical, high, medium, low]
+    description: Filter by severity level
+  - in: query
+    name: status
+    type: string
+    enum: [new, flagged, dismissed]
+    description: Filter by alert status
+responses:
+  200:
+    description: Alerts retrieved successfully
+    schema:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: '#/definitions/Alert'
+        total:
+          type: integer
+          description: Total number of alerts
+        page:
+          type: integer
+          description: Current page number
+        per_page:
+          type: integer
+          description: Items per page
+        total_pages:
+          type: integer
+          description: Total number of pages
+    examples:
+      application/json:
+        alerts:
+          - id: 1
+            timestamp: "2025-11-24T01:30:00.000000"
+            severity: high
+            source_ip: "192.168.1.100"
+            destination_ip: "10.0.1.50"
+            attack_type: DDoS
+            anomaly_score: 0.85
+            confidence: 0.92
+            status: new
+            flagged: false
+            dismissed: false
+        total: 150
+        page: 1
+        per_page: 20
+        total_pages: 8
+  401:
+    description: Unauthorized - invalid or missing token
+    schema:
+      $ref: '#/definitions/Error'
+  403:
+    description: Forbidden - insufficient permissions
+    schema:
+      $ref: '#/definitions/Error'
+  500:
+    description: Internal server error
+    schema:
+      $ref: '#/definitions/Error'

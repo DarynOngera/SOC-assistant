@@ -291,6 +291,7 @@ python train_from_real_alerts.py
 | **Prometheus** | http://localhost:9090 | Metrics collection |
 | **Grafana** | http://localhost:3001 | Monitoring dashboards |
 | **Metrics Endpoint** | http://localhost:5000/metrics | Prometheus metrics |
+| **API Documentation** | http://localhost:5000/api/docs | Interactive Swagger UI |
 
 ## 🔐 User Roles & Access
 
