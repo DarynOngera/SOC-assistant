@@ -40,6 +40,16 @@ from bson import ObjectId
 # Add project root to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
+# Configure structured logging FIRST
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Create logger for this module
+logger = logging.getLogger(__name__)
+
 # MongoDB imports
 from src.database.mongodb_config import initialize_mongodb, mongodb_health_check
 from src.database.mongodb_dal import get_dal
@@ -49,15 +59,14 @@ from src.auth.mongodb_auth_utils import MongoDBAuthManager, token_required, admi
 from src.utils.csv_processor import CSVProcessor
 from src.utils.audit_exporter import AuditExporter
 
-# Configure structured logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-# Create logger for this module
-logger = logging.getLogger(__name__)
+# NLP imports (non-disruptive enhancement)
+try:
+    from src.ml.nlp_analyzer import get_nlp_analyzer, get_threat_enricher
+    NLP_AVAILABLE = True
+    logger.info("✓ NLP analyzer loaded successfully")
+except ImportError as e:
+    NLP_AVAILABLE = False
+    logger.warning(f"⚠ NLP analyzer not available: {e}")
 
 # Reduce noise from external libraries
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
@@ -1560,16 +1569,21 @@ class SOCDashboardAPI:
                         alert_copy = alert.copy()
                         if isinstance(alert_copy['timestamp'], datetime):
                             alert_copy['timestamp'] = alert_copy['timestamp'].isoformat()
+                        # Ensure alert has an 'id' field for frontend deduplication
+                        if 'alert_id' in alert_copy and 'id' not in alert_copy:
+                            alert_copy['id'] = alert_copy['alert_id']
                         alerts_for_broadcast.append(alert_copy)
                     
                     # Get updated stats
                     updated_stats = self.get_system_stats()
                     
+                    logger.info(f"📡 Broadcasting {len(alerts_for_broadcast)} alerts via WebSocket")
+                    
                     # Emit to all connected clients using the same event as the monitoring system
                     socketio.emit('new_alerts', {
                         'alerts': alerts_for_broadcast,
                         'stats': updated_stats,
-                        'source': 'mininet_simulation'
+                        'source': 'monitoring'
                     })
                     
                     # Also emit alerts_update for compatibility
@@ -1577,6 +1591,13 @@ class SOCDashboardAPI:
                         'alerts': alerts_for_broadcast,
                         'stats': updated_stats
                     })
+                    
+                    logger.info(f"✅ WebSocket broadcast complete")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Failed to broadcast alerts: {e}")
+                    import traceback
+                    traceback.print_exc()
                     
                     # Emit batch notification for immediate visual feedback
                     socketio.emit('alert_batch_generated', {
@@ -5577,6 +5598,169 @@ def flush_database():
         logger.error(f"Error flushing database: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
+# ============================================================================
+# NLP & THREAT INTELLIGENCE ENDPOINTS (Non-disruptive Enhancement)
+# ============================================================================
+
+@app.route('/api/nlp/analyze-alert', methods=['POST'])
+@token_required
+def analyze_alert_nlp():
+    """
+    Analyze alert description with NLP
+    Non-disruptive enhancement - returns empty if NLP not available
+    """
+    if not NLP_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'message': 'NLP analyzer not available',
+            'analysis': None
+        }), 503
+    
+    try:
+        data = request.json
+        alert_text = data.get('text', '')
+        attack_type = data.get('attack_type')  # Optional ML-detected type
+        
+        if not alert_text:
+            return jsonify({'success': False, 'message': 'No alert text provided'}), 400
+        
+        # Perform NLP analysis
+        analyzer = get_nlp_analyzer()
+        analysis = analyzer.analyze_alert(alert_text, attack_type)
+        summary = analyzer.generate_summary(alert_text, analysis)
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis,
+            'summary': summary
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in NLP analysis: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/nlp/enrich-ip', methods=['POST'])
+@token_required
+def enrich_ip_threat_intel():
+    """
+    Enrich IP address with threat intelligence
+    Non-disruptive enhancement - returns empty if not available
+    """
+    if not NLP_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'message': 'Threat intelligence enricher not available',
+            'enrichment': None
+        }), 503
+    
+    try:
+        data = request.json
+        ip_address = data.get('ip')
+        
+        if not ip_address:
+            return jsonify({'success': False, 'message': 'No IP address provided'}), 400
+        
+        # Perform threat intelligence enrichment
+        enricher = get_threat_enricher(enable_external_apis=False)  # Local only for now
+        enrichment = enricher.enrich_ip(ip_address)
+        summary = enricher.generate_threat_summary(enrichment)
+        
+        return jsonify({
+            'success': True,
+            'enrichment': enrichment,
+            'summary': summary
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in threat intelligence enrichment: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/nlp/batch-analyze', methods=['POST'])
+@token_required
+def batch_analyze_alerts():
+    """
+    Batch analyze multiple alerts with NLP
+    Useful for enriching existing alerts
+    """
+    if not NLP_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'message': 'NLP analyzer not available',
+            'results': []
+        }), 503
+    
+    try:
+        data = request.json
+        alerts = data.get('alerts', [])
+        
+        if not alerts or not isinstance(alerts, list):
+            return jsonify({'success': False, 'message': 'Invalid alerts data'}), 400
+        
+        # Limit batch size
+        if len(alerts) > 100:
+            return jsonify({'success': False, 'message': 'Batch size too large (max 100)'}), 400
+        
+        analyzer = get_nlp_analyzer()
+        enricher = get_threat_enricher(enable_external_apis=False)
+        
+        results = []
+        for alert in alerts:
+            alert_text = alert.get('description', '') or alert.get('text', '')
+            attack_type = alert.get('attack_type')
+            src_ip = alert.get('src_ip')
+            
+            result = {
+                'alert_id': alert.get('id') or alert.get('_id'),
+                'nlp_analysis': None,
+                'threat_intel': None
+            }
+            
+            # NLP analysis
+            if alert_text:
+                analysis = analyzer.analyze_alert(alert_text, attack_type)
+                result['nlp_analysis'] = {
+                    'severity': analysis['severity'],
+                    'attack_types': analysis['attack_types'],
+                    'confidence': analysis['confidence'],
+                    'summary': analyzer.generate_summary(alert_text, analysis)
+                }
+            
+            # Threat intelligence
+            if src_ip:
+                enrichment = enricher.enrich_ip(src_ip)
+                result['threat_intel'] = {
+                    'is_malicious': enrichment['is_malicious'],
+                    'reputation_score': enrichment['reputation_score'],
+                    'summary': enricher.generate_threat_summary(enrichment)
+                }
+            
+            results.append(result)
+        
+        return jsonify({
+            'success': True,
+            'count': len(results),
+            'results': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in batch analysis: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/nlp/status', methods=['GET'])
+@token_required
+def nlp_status():
+    """Check NLP and threat intelligence availability"""
+    return jsonify({
+        'nlp_available': NLP_AVAILABLE,
+        'features': {
+            'alert_classification': NLP_AVAILABLE,
+            'entity_extraction': NLP_AVAILABLE,
+            'threat_intelligence': NLP_AVAILABLE,
+            'batch_analysis': NLP_AVAILABLE
+        },
+        'external_apis_enabled': False  # Can be configured later
+    })
+
 if __name__ == '__main__':
     # Clean startup banner
     print("\n" + "="*80)
@@ -5619,4 +5803,4 @@ if __name__ == '__main__':
     print("✅ Server ready - Press CTRL+C to stop")
     print("="*80 + "\n")
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)

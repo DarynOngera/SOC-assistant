@@ -1,0 +1,12 @@
+{
+  "training_date": "2025-11-24T02:38:31.972288",
+  "data_source": "mongodb_real_alerts",
+  "total_samples": 2000,
+  "train_samples": 1400,
+  "val_samples": 200,
+  "test_samples": 400,
+  "test_accuracy": 0.795,
+  "test_f1": 0.7963256907701353,
+  "model_path": "training_output/nlp_models/simple_classifier",
+  "visualization_path": "training_output/nlp_models/training_results.png"
+}
