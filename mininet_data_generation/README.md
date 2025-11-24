@@ -9,10 +9,10 @@ This directory contains a **clean, minimal setup** for VM-based Mininet training
 
 ## 🚀 Quick Start
 
-### 1. VM Setup (CentOS)
+### 1. VM Setup (Ubuntu - Recommended)
 ```bash
-# Run VM training setup
-sudo ./setup_vm_training_only.sh
+# Run Ubuntu Mininet setup
+sudo ./setup_ubuntu_mininet.sh
 
 # Execute training pipeline  
 ./run_vm_training.sh
@@ -20,6 +20,8 @@ sudo ./setup_vm_training_only.sh
 # Export models for host
 # Creates: exported_models.zip
 ```
+
+**Note**: The system has been migrated from CentOS to Ubuntu for better package management and easier setup. See `UBUNTU_SETUP_GUIDE.md` for detailed instructions.
 
 ### 2. Host Integration
 ```bash

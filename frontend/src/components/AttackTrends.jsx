@@ -51,21 +51,34 @@ const AttackTrends = () => {
     // Set up WebSocket listener for real-time updates
     const socket = io('http://localhost:5000');
     
+    // Debounce timer to batch multiple updates
+    let refreshTimer = null;
+    
     // Listen for new alerts and update trends immediately
     socket.on('new_alerts', (data) => {
-      console.log('AttackTrends: Received new alerts, refreshing...');
-      fetchTrendsData();
+      console.log('AttackTrends: Received new alerts:', data.alerts?.length);
+      // Batch updates to avoid rapid refreshes
+      if (data.alerts && data.alerts.length > 0) {
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => {
+          fetchTrendsData();
+          refreshTimer = null;
+        }, 2000); // Wait 2 seconds to batch updates
+      }
     });
     
     // Listen for batch alerts from simulation
     socket.on('alert_batch_generated', (data) => {
-      console.log('AttackTrends: Batch alerts generated, refreshing...');
+      console.log('AttackTrends: Batch alerts generated:', data.count);
+      // Immediate refresh for batch operations
+      if (refreshTimer) clearTimeout(refreshTimer);
       fetchTrendsData();
     });
     
     return () => {
       clearInterval(interval);
       socket.disconnect();
+      if (refreshTimer) clearTimeout(refreshTimer);
     };
   }, [timeRange, granularity]);
 

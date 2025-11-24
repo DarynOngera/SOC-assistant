@@ -348,6 +348,17 @@ class MongoDBCompatibleAuditLogger:
                 success=details.get('success', True),
                 details=details
             )
+            
+            # Emit WebSocket event for real-time updates
+            try:
+                socketio.emit('audit_log_created', {
+                    'event_type': event_type.value if hasattr(event_type, 'value') else str(event_type),
+                    'username': username,
+                    'timestamp': datetime.utcnow().isoformat()
+                })
+            except:
+                pass  # Don't fail if socketio not available
+                
         except Exception as e:
             print(f"Error logging audit event: {e}")
 
@@ -460,26 +471,34 @@ class SOCDashboardAPI:
         self.live_scores = []  # Stores scores from current simulation
         self.max_live_scores = 1000  # Keep last 1000 scores for performance
     
-    def _get_distributed_timestamp(self, time_range_hours=6):
+    def _get_distributed_timestamp(self, time_range_hours=6, use_current=True):
         """
-        Generate timestamps distributed across a time range for better graph visualization.
-        This ensures alerts are spread across multiple time buckets instead of clustering.
+        Generate timestamps for alerts.
+        
+        Args:
+            time_range_hours: Time range for distribution (only used if use_current=False)
+            use_current: If True, use current time with small random offset (default)
+                        If False, distribute across time range (for historical data)
+        
         Uses Nairobi timezone (EAT - UTC+3).
         """
-        # Distribute alerts across the time range
-        # Use counter to ensure even distribution
-        max_offset_seconds = time_range_hours * 3600
-        
-        # Create a semi-random but distributed offset
-        # Mix counter-based distribution with some randomness
-        base_offset = (self.alert_generation_counter % 20) * (max_offset_seconds // 20)
-        random_offset = random.randint(0, max_offset_seconds // 20)
-        total_offset = base_offset + random_offset
-        
-        self.alert_generation_counter += 1
-        
-        # Return timezone-aware timestamp in Nairobi time
-        return get_current_time() - timedelta(seconds=total_offset)
+        if use_current:
+            # Use current time with small random offset (0-60 seconds in the past)
+            # This ensures alerts appear as "just now" or "1m ago"
+            random_offset = random.randint(0, 60)
+            return get_current_time() - timedelta(seconds=random_offset)
+        else:
+            # Distribute alerts across the time range (for historical data)
+            max_offset_seconds = time_range_hours * 3600
+            
+            # Create a semi-random but distributed offset
+            base_offset = (self.alert_generation_counter % 20) * (max_offset_seconds // 20)
+            random_offset = random.randint(0, max_offset_seconds // 20)
+            total_offset = base_offset + random_offset
+            
+            self.alert_generation_counter += 1
+            
+            return get_current_time() - timedelta(seconds=total_offset)
     
     def _initialize_mininet_client(self):
         """Initialize remote Mininet VM client"""
@@ -667,7 +686,7 @@ class SOCDashboardAPI:
         for i in range(batch_size):
             # Generate realistic network traffic features with distributed timestamps
             record = {
-                'timestamp': self._get_distributed_timestamp(time_range_hours=6),
+                'timestamp': self._get_distributed_timestamp(),
                 'src_ip': f"192.168.{int(np.random.randint(1,255))}.{int(np.random.randint(1,255))}",
                 'dst_ip': f"10.0.{int(np.random.randint(1,255))}.{int(np.random.randint(1,255))}",
                 'src_port': int(np.random.randint(1024, 65535)),
@@ -1570,7 +1589,7 @@ class SOCDashboardAPI:
                     try:
                         # Create alert data from model prediction with distributed timestamp
                         alert_data = {
-                            'timestamp': self._get_distributed_timestamp(time_range_hours=6),
+                            'timestamp': self._get_distributed_timestamp(),
                             'source_ip': record.get('source_ip', record.get('src_ip', f"10.0.{random.randint(1,3)}.{random.randint(1,10)}")),
                             'destination_ip': record.get('destination_ip', record.get('dst_ip', f"10.0.{random.randint(1,3)}.{random.randint(1,10)}")),
                             'source_port': int(record.get('source_port', record.get('src_port', random.randint(1024, 65535)))),
@@ -1991,7 +2010,7 @@ class SOCDashboardAPI:
                 
                 # Create alert data from model prediction with distributed timestamp
                 alert_data = {
-                    'timestamp': self._get_distributed_timestamp(time_range_hours=6),
+                    'timestamp': self._get_distributed_timestamp(),
                     'source_ip': record.get('src_ip', f"10.0.{random.randint(1,3)}.{random.randint(1,10)}"),
                     'destination_ip': record.get('dst_ip', f"10.0.{random.randint(1,3)}.{random.randint(1,10)}"),
                     'source_port': int(record.get('src_port', random.randint(1024, 65535))),
@@ -3159,9 +3178,15 @@ def get_audit_logs():
                 if '_id' in log:
                     log['_id'] = str(log['_id'])
                 
-                # Convert datetime to ISO string
-                if 'timestamp' in log and hasattr(log['timestamp'], 'isoformat'):
-                    log['timestamp'] = log['timestamp'].isoformat()
+                # Convert datetime to ISO string with UTC timezone
+                if 'timestamp' in log:
+                    if hasattr(log['timestamp'], 'isoformat'):
+                        # datetime object - convert to UTC
+                        if log['timestamp'].tzinfo is None:
+                            log['timestamp'] = log['timestamp'].replace(tzinfo=timezone.utc).isoformat()
+                        else:
+                            log['timestamp'] = log['timestamp'].astimezone(timezone.utc).isoformat()
+                    # If it's already a string, leave it as is
         
         return jsonify(logs)
         
@@ -3774,9 +3799,15 @@ def get_alerts():
         for alert in result['alerts']:
             if '_id' in alert:
                 alert['_id'] = str(alert['_id'])
-            # Convert datetime to ISO string if needed
+            # Convert datetime to ISO string with UTC timezone
             if 'timestamp' in alert and hasattr(alert['timestamp'], 'isoformat'):
-                alert['timestamp'] = alert['timestamp'].isoformat()
+                # Ensure timezone-aware datetime is converted to UTC for consistent frontend handling
+                if alert['timestamp'].tzinfo is None:
+                    # If naive datetime, assume it's UTC
+                    alert['timestamp'] = alert['timestamp'].replace(tzinfo=timezone.utc).isoformat()
+                else:
+                    # Convert to UTC and format as ISO string
+                    alert['timestamp'] = alert['timestamp'].astimezone(timezone.utc).isoformat()
         
         return jsonify(result)
         

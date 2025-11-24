@@ -366,7 +366,7 @@ class DocumentBuilder:
                                action: str, success: bool, **kwargs) -> Dict[str, Any]:
         """Build audit log document"""
         return {
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.utcnow(),  # Use datetime object for consistency with alerts
             "event_type": event_type,
             "username": username,
             "ip_address": ip_address,

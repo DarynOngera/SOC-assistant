@@ -3,6 +3,36 @@ import {
   Activity, Filter, Download, Calendar, User, AlertTriangle,
   Shield, Eye, Search, ChevronLeft, ChevronRight, FileText, Database, FileSpreadsheet, File
 } from 'lucide-react';
+import { io } from 'socket.io-client';
+
+// Timezone-aware timestamp formatting
+const formatTimestamp = (timestamp) => {
+  if (!timestamp) return 'N/A';
+  
+  try {
+    const date = new Date(timestamp);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    
+    // Format with local timezone
+    const options = {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZoneName: 'short'
+    };
+    
+    return date.toLocaleString('en-US', options);
+  } catch (error) {
+    console.error('Error formatting timestamp:', error);
+    return 'Invalid Date';
+  }
+};
 
 const AuditLogs = () => {
   const [logs, setLogs] = useState([]);
@@ -23,6 +53,34 @@ const AuditLogs = () => {
     fetchAuditLogs();
     fetchAuditSummary();
     fetchSecurityAlerts();
+    
+    // Set up polling for automatic refresh (every 30 seconds)
+    const interval = setInterval(() => {
+      fetchAuditLogs();
+      fetchAuditSummary();
+      fetchSecurityAlerts();
+    }, 30000);
+    
+    // Set up WebSocket for real-time updates
+    const socket = io('http://localhost:5000');
+    
+    // Listen for audit log updates
+    socket.on('audit_log_created', (data) => {
+      console.log('AuditLogs: New audit log created, refreshing...');
+      fetchAuditLogs();
+      fetchAuditSummary();
+    });
+    
+    // Listen for user actions that generate audit logs
+    socket.on('new_alerts', () => {
+      // New alerts may trigger audit logs
+      setTimeout(() => fetchAuditLogs(), 1000);
+    });
+    
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, [filters]);
 
   const getAuthHeaders = () => {
@@ -444,7 +502,7 @@ const AuditLogs = () => {
                       {alert.severity.toUpperCase()}
                     </span>
                     <p className="text-xs text-gray-400 mt-1">
-                      {new Date(alert.timestamp).toLocaleString()}
+                      {formatTimestamp(alert.timestamp)}
                     </p>
                   </div>
                 </div>
@@ -591,7 +649,7 @@ const AuditLogs = () => {
                 {(logs || []).map((log, index) => (
                   <tr key={log.id || `${log.timestamp}-${index}-${Math.random()}`} className="hover:bg-slate-900/50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      {new Date(log.timestamp).toLocaleString()}
+                      {formatTimestamp(log.timestamp)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getEventTypeColor(log.event_type)}`}>

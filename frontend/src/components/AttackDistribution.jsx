@@ -46,27 +46,46 @@ const AttackDistribution = () => {
     // Set up WebSocket listener for real-time updates
     const socket = io('http://localhost:5000');
     
+    // Debounce timer to batch multiple updates
+    let refreshTimer = null;
+    
     // Listen for new alerts and update distribution immediately
     socket.on('new_alerts', (data) => {
-      console.log('AttackDistribution: Received new alerts, refreshing...');
-      fetchDistributionData();
+      console.log('AttackDistribution: Received new alerts:', data.alerts?.length);
+      // Batch updates to avoid rapid refreshes
+      if (data.alerts && data.alerts.length > 0) {
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => {
+          fetchDistributionData();
+          refreshTimer = null;
+        }, 2000); // Wait 2 seconds to batch updates
+      }
     });
     
     // Listen for alerts updates
     socket.on('alerts_update', (data) => {
-      console.log('AttackDistribution: Alerts updated, refreshing...');
-      fetchDistributionData();
+      console.log('AttackDistribution: Alerts updated');
+      if (data.alerts && data.alerts.length > 0) {
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => {
+          fetchDistributionData();
+          refreshTimer = null;
+        }, 2000);
+      }
     });
     
     // Listen for batch alerts from simulation
     socket.on('alert_batch_generated', (data) => {
-      console.log('AttackDistribution: Batch alerts generated, refreshing...');
+      console.log('AttackDistribution: Batch alerts generated:', data.count);
+      // Immediate refresh for batch operations
+      if (refreshTimer) clearTimeout(refreshTimer);
       fetchDistributionData();
     });
     
     return () => {
       clearInterval(interval);
       socket.disconnect();
+      if (refreshTimer) clearTimeout(refreshTimer);
     };
   }, []);
 
