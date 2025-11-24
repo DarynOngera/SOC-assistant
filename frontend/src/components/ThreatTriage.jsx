@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Shield, Clock, Target, TrendingUp, Eye, Flag, X, CheckCircle, 
          ArrowUp, UserPlus, Search, FileText, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { io } from 'socket.io-client';
+import NLPInsights from './NLPInsights';
 
 const ThreatTriage = () => {
   const [triageData, setTriageData] = useState(null);
@@ -448,7 +449,7 @@ const ThreatTriage = () => {
 
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-slate-800 border border-slate-700/50 rounded-lg shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="bg-slate-800 border border-slate-700/50 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-white capitalize">
               {triageAction} Alert #{currentAlert.id}
@@ -467,6 +468,16 @@ const ThreatTriage = () => {
               <div><strong>Source:</strong> {currentAlert.source_ip}</div>
               <div><strong>Severity:</strong> {currentAlert.severity}</div>
             </div>
+          </div>
+
+          {/* NLP Insights */}
+          <div className="mb-4">
+            <NLPInsights alert={{
+              description: `${currentAlert.attack_type} attack from ${currentAlert.source_ip}`,
+              src_ip: currentAlert.source_ip,
+              attack_type: currentAlert.attack_type,
+              severity: currentAlert.severity
+            }} />
           </div>
 
           <form onSubmit={handleSubmit}>

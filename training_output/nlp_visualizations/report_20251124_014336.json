@@ -1,0 +1,18 @@
+{
+  "total_alerts": 10,
+  "severity_distribution": {
+    "low": 4,
+    "medium": 2,
+    "high": 3,
+    "critical": 1
+  },
+  "average_confidence": 0.7099999999999999,
+  "method_usage": {
+    "ml": 0,
+    "rules": 10
+  },
+  "timestamp": "2025-11-24T01:43:35.610951",
+  "visualizations": {
+    "classification": "training_output/nlp_visualizations/classification_20251124_014335.png"
+  }
+}

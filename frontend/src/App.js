@@ -44,6 +44,8 @@ function App() {
   const [simulationNotification, setSimulationNotification] = useState(null);
 
   useEffect(() => {
+    let socketInstance = null;
+    
     // Check for existing authentication
     const token = localStorage.getItem('access_token');
     const userData = localStorage.getItem('user');
@@ -52,14 +54,22 @@ function App() {
       try {
         const parsedUser = JSON.parse(userData);
         setUser(parsedUser);
-        initializeSocket(token);
+        socketInstance = initializeSocket(token);
       } catch (error) {
         console.error('Invalid user data:', error);
         handleLogout();
       }
     }
     
+    // Always set loading to false
     setLoading(false);
+    
+    // Cleanup on unmount
+    return () => {
+      if (socketInstance) {
+        socketInstance.disconnect();
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -72,21 +82,42 @@ function App() {
 
     newSocket.on('connect', () => {
       setIsConnected(true);
-      console.log('Connected to server');
+      console.log('✅ WebSocket Connected to server');
+      console.log('Socket ID:', newSocket.id);
     });
 
     newSocket.on('disconnect', () => {
       setIsConnected(false);
-      console.log('Disconnected from server');
+      console.log('❌ Disconnected from server');
+      // Don't clear data on disconnect, keep existing alerts
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('❌ WebSocket connection error:', error.message);
+      setIsConnected(false);
+    });
+
+    newSocket.on('error', (error) => {
+      console.error('❌ WebSocket error:', error);
     });
 
     newSocket.on('connection_established', (data) => {
-      console.log('Connection established:', data);
+      console.log('✅ Connection established:', data);
     });
 
     newSocket.on('new_alerts', (data) => {
-      setAlerts(prevAlerts => [...data.alerts, ...prevAlerts].slice(0, 100));
-      setStats(data.stats);
+      console.log('📨 Received new_alerts:', data.alerts?.length, 'alerts');
+      
+      // Append new alerts without duplicates
+      setAlerts(prevAlerts => {
+        const existingIds = new Set(prevAlerts.map(a => a.id));
+        const newAlerts = data.alerts.filter(a => !existingIds.has(a.id));
+        console.log('✅ Adding', newAlerts.length, 'new unique alerts');
+        return [...newAlerts, ...prevAlerts].slice(0, 100);
+      });
+      if (data.stats) {
+        setStats(data.stats);
+      }
       
       // Show notification if from simulation
       if (data.source === 'mininet_simulation' && data.alerts.length > 0) {
@@ -103,8 +134,17 @@ function App() {
     });
 
     newSocket.on('alerts_update', (data) => {
-      setAlerts(data.alerts);
-      setStats(data.stats);
+      // Only update if we have new data, don't replace everything
+      if (data.alerts && data.alerts.length > 0) {
+        setAlerts(prevAlerts => {
+          const existingIds = new Set(prevAlerts.map(a => a.id));
+          const newAlerts = data.alerts.filter(a => !existingIds.has(a.id));
+          return [...newAlerts, ...prevAlerts].slice(0, 100);
+        });
+      }
+      if (data.stats) {
+        setStats(data.stats);
+      }
     });
 
     // Listen for simulation notifications
@@ -142,7 +182,16 @@ function App() {
 
       if (alertsResponse.ok) {
         const alertsData = await alertsResponse.json();
-        setAlerts(alertsData.alerts);
+        // Only set alerts if we don't have any yet (initial load)
+        setAlerts(prevAlerts => {
+          if (prevAlerts.length === 0) {
+            return alertsData.alerts;
+          }
+          // Merge new alerts with existing, remove duplicates
+          const existingIds = new Set(prevAlerts.map(a => a.id));
+          const newAlerts = alertsData.alerts.filter(a => !existingIds.has(a.id));
+          return [...prevAlerts, ...newAlerts].slice(0, 100);
+        });
       }
 
       if (statsResponse.ok) {
