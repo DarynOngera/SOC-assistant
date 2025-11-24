@@ -76,7 +76,15 @@ const AlertsTable = ({ alerts, onAlertAction }) => {
   };
 
   const formatTimestamp = (timestamp) => {
-    return new Date(timestamp).toLocaleString();
+    // Parse ISO timestamp (handles UTC properly)
+    const date = new Date(timestamp);
+    
+    // Validate date
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
+    }
+    
+    return date.toLocaleString();
   };
 
   const SortIcon = ({ field }) => {

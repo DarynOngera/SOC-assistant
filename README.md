@@ -124,9 +124,11 @@ SOC-assistant/
 - **Network**: For threat intelligence enrichment
 
 ### Operating System Support
-- ✅ **Linux**: Ubuntu 20.04+, CentOS 8+ (recommended)
+- ✅ **Linux**: Ubuntu 20.04+ or 22.04 LTS (recommended)
 - ✅ **macOS**: 11.0+ (Big Sur or later)
 - ⚠️ **Windows**: WSL2 required (native not supported)
+
+**Note**: Mininet VM now uses Ubuntu instead of CentOS for better package management and easier setup.
 
 ### MongoDB Setup
 

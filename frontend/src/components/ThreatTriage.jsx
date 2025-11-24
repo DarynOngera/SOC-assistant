@@ -150,21 +150,41 @@ const ThreatTriage = () => {
     // Set up WebSocket for real-time updates
     const socket = io('http://localhost:5000');
     
+    // Debounce timer for batching multiple updates
+    let refreshTimer = null;
+    
     // Listen for new alerts and update triage immediately
     socket.on('new_alerts', (data) => {
-      console.log('ThreatTriage: Received new alerts, refreshing...');
-      fetchTriageData();
+      console.log('ThreatTriage: Received new alerts:', data.alerts?.length);
+      // Only refresh if we have significant new data (avoid constant refreshing)
+      if (data.alerts && data.alerts.length > 0) {
+        // Clear existing timer and set new one to batch updates
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => {
+          fetchTriageData();
+          refreshTimer = null;
+        }, 1000); // Wait 1 second to batch multiple alerts
+      }
     });
     
     // Listen for alerts updates
     socket.on('alerts_update', (data) => {
-      console.log('ThreatTriage: Alerts updated, refreshing...');
-      fetchTriageData();
+      console.log('ThreatTriage: Alerts updated');
+      // Debounce refresh
+      if (data.alerts && data.alerts.length > 0) {
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => {
+          fetchTriageData();
+          refreshTimer = null;
+        }, 1000);
+      }
     });
     
     // Listen for batch alerts from simulation
     socket.on('alert_batch_generated', (data) => {
-      console.log('ThreatTriage: Batch alerts generated, refreshing...');
+      console.log('ThreatTriage: Batch alerts generated:', data.count);
+      // Immediate refresh for batch operations (clear any pending refresh)
+      if (refreshTimer) clearTimeout(refreshTimer);
       fetchTriageData();
     });
     
@@ -216,16 +236,28 @@ const ThreatTriage = () => {
   };
 
   const formatTimestamp = (timestamp) => {
+    // Parse ISO timestamp (handles UTC properly)
     const date = new Date(timestamp);
     const now = new Date();
+    
+    // Validate date
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
+    }
+    
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 60) {
+    if (diffMins < 1) {
+      return 'just now';
+    } else if (diffMins < 60) {
       return `${diffMins}m ago`;
     } else if (diffHours < 24) {
       return `${diffHours}h ago`;
+    } else if (diffDays < 7) {
+      return `${diffDays}d ago`;
     } else {
       return date.toLocaleDateString();
     }
