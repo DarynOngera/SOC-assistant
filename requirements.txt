@@ -28,4 +28,10 @@ webauthn>=2.0.0
 cryptography>=41.0.0
 fido2>=1.1.2
 scapy>=2.5.0
-mininet>=2.3.0
+##mininet>=2.3.0
+
+# Monitoring & Logging Infrastructure
+prometheus-client>=0.19.0
+prometheus-flask-exporter>=0.23.0
+python-json-logger>=2.0.7
+psutil>=5.9.0

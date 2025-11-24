@@ -1,0 +1,216 @@
+{
+  "dashboard": {
+    "title": "SOC Assistant - Production Monitoring",
+    "tags": ["soc", "security", "ml", "nlp"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "HTTP Request Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "{{method}} {{endpoint}} - {{status}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "HTTP Response Time (95th percentile)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Alert Generation Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(alerts_generated_total[5m])",
+            "legendFormat": "{{severity}} - {{attack_type}}"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Active Alerts by Severity",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "alerts_active",
+            "legendFormat": "{{severity}}"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "ML Prediction Latency",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(ml_prediction_latency_seconds_bucket[5m]))",
+            "legendFormat": "{{model_type}}"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "ML Predictions per Second",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "rate(ml_predictions_total[5m])",
+            "legendFormat": "{{model_type}} - {{prediction}}"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "NLP Analysis Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "rate(nlp_analyses_total[5m])",
+            "legendFormat": "NLP Analyses"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "NLP Confidence Distribution",
+        "type": "heatmap",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "rate(nlp_confidence_score_bucket[5m])",
+            "legendFormat": "{{le}}"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Database Operation Latency",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(db_operation_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{operation}} - {{collection}}"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Active Database Connections",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+        "targets": [
+          {
+            "expr": "db_connections_active",
+            "legendFormat": "DB Connections"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "WebSocket Connections",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40},
+        "targets": [
+          {
+            "expr": "websocket_connections_active",
+            "legendFormat": "Active Connections"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "WebSocket Message Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40},
+        "targets": [
+          {
+            "expr": "rate(websocket_messages_total[5m])",
+            "legendFormat": "{{event_type}} - {{direction}}"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "System CPU Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 48},
+        "targets": [
+          {
+            "expr": "system_cpu_usage_percent",
+            "legendFormat": "CPU %"
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "title": "System Memory Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 48},
+        "targets": [
+          {
+            "expr": "system_memory_usage_percent",
+            "legendFormat": "Memory %"
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "title": "System Disk Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 48},
+        "targets": [
+          {
+            "expr": "system_disk_usage_percent",
+            "legendFormat": "Disk %"
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "title": "Authentication Attempts",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 56},
+        "targets": [
+          {
+            "expr": "rate(auth_attempts_total[5m])",
+            "legendFormat": "{{status}} - {{method}}"
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "title": "Active User Sessions",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 56},
+        "targets": [
+          {
+            "expr": "active_sessions",
+            "legendFormat": "Active Sessions"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -68,6 +68,18 @@ except ImportError as e:
     NLP_AVAILABLE = False
     logger.warning(f"⚠ NLP analyzer not available: {e}")
 
+# Infrastructure monitoring (optional)
+try:
+    from src.infrastructure import get_metrics, get_health_check, setup_logging
+    from prometheus_flask_exporter import PrometheusMetrics
+    MONITORING_AVAILABLE = True
+    print("✅ Monitoring infrastructure loaded")
+    logger.info("✓ Monitoring infrastructure loaded")
+except ImportError as e:
+    MONITORING_AVAILABLE = False
+    print(f"⚠️  Monitoring not available: {e}")
+    logger.warning(f"⚠ Monitoring not available: {e}")
+
 # Reduce noise from external libraries
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 logging.getLogger('socketio').setLevel(logging.WARNING)
@@ -97,6 +109,31 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'soc-dashboard-secret-key-change-in-production')
 CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
 socketio = SocketIO(app, cors_allowed_origins=["http://localhost:3000"], logger=False, engineio_logger=False)
+
+# Initialize Prometheus metrics (optional)
+if MONITORING_AVAILABLE:
+    try:
+        print(f"DEBUG: Initializing PrometheusMetrics with app: {app}")
+        metrics = PrometheusMetrics(app)
+        print(f"DEBUG: PrometheusMetrics created: {metrics}")
+        metrics.info('soc_assistant_info', 'SOC Assistant Application Info', version='1.0.0')
+        print("DEBUG: metrics.info() called")
+        soc_metrics = get_metrics()
+        health_check = get_health_check()
+        print("✅ Prometheus metrics enabled at /metrics")
+        logger.info("✓ Prometheus metrics enabled at /metrics")
+        
+        # Verify route was registered
+        print(f"DEBUG: Flask routes: {[rule.rule for rule in app.url_map.iter_rules() if 'metrics' in rule.rule]}")
+    except Exception as e:
+        import traceback
+        print(f"⚠️  Could not initialize metrics: {e}")
+        print(f"DEBUG: Full traceback:")
+        traceback.print_exc()
+        logger.warning(f"⚠ Could not initialize metrics: {e}")
+        MONITORING_AVAILABLE = False
+else:
+    print("⚠️  Monitoring infrastructure not available - /metrics endpoint disabled")
 
 # Rate limiting
 limiter = Limiter(
@@ -3522,6 +3559,48 @@ def get_alerts():
     except Exception as e:
         print(f"Error getting alerts: {e}")
         return jsonify({'error': 'Failed to get alerts'}), 500
+
+# Metrics endpoint (manual registration for SocketIO compatibility)
+if MONITORING_AVAILABLE:
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    
+    @app.route('/metrics')
+    def metrics_endpoint():
+        """Prometheus metrics endpoint"""
+        return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
+
+# Health check endpoints (no authentication required)
+@app.route('/health')
+def health():
+    """Overall health check"""
+    if MONITORING_AVAILABLE:
+        return jsonify(health_check.run_checks())
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'monitoring': 'disabled'
+    })
+
+@app.route('/health/ready')
+def health_ready():
+    """Readiness probe"""
+    if MONITORING_AVAILABLE and health_check.get_readiness():
+        return jsonify({'status': 'ready'}), 200
+    elif not MONITORING_AVAILABLE:
+        # Check basic readiness without monitoring
+        try:
+            mongodb_health_check()
+            return jsonify({'status': 'ready'}), 200
+        except:
+            return jsonify({'status': 'not ready'}), 503
+    return jsonify({'status': 'not ready'}), 503
+
+@app.route('/health/live')
+def health_live():
+    """Liveness probe"""
+    if MONITORING_AVAILABLE and health_check.get_liveness():
+        return jsonify({'status': 'alive'}), 200
+    return jsonify({'status': 'alive'}), 200
 
 @app.route('/api/stats')
 @token_required
