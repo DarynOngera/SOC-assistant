@@ -1,0 +1,115 @@
+# Prometheus Alert Rules for SOC Assistant
+
+groups:
+  - name: soc_assistant_alerts
+    interval: 30s
+    rules:
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors/sec for {{ $labels.endpoint }}"
+
+      # High Response Time
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s for {{ $labels.endpoint }}"
+
+      # High Alert Volume
+      - alert: HighAlertVolume
+        expr: rate(alerts_generated_total[5m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High alert generation rate"
+          description: "Generating {{ $value }} alerts/sec"
+
+      # Critical Alerts Spike
+      - alert: CriticalAlertSpike
+        expr: rate(alerts_generated_total{severity="critical"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Spike in critical alerts"
+          description: "Critical alerts rate: {{ $value }}/sec"
+
+      # Database Connection Issues
+      - alert: DatabaseConnectionLow
+        expr: db_connections_active < 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No active database connections"
+          description: "Database may be unavailable"
+
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: system_cpu_usage_percent > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}%"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: system_memory_usage_percent > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}%"
+
+      # ML Model Prediction Latency
+      - alert: SlowMLPredictions
+        expr: histogram_quantile(0.95, rate(ml_prediction_latency_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow ML predictions"
+          description: "95th percentile ML latency is {{ $value }}s"
+
+      # Failed Authentication Attempts
+      - alert: HighFailedAuthRate
+        expr: rate(auth_attempts_total{status="failed"}[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High failed authentication rate"
+          description: "Failed auth rate: {{ $value }}/sec - possible brute force attack"
+
+      # WebSocket Connection Drop
+      - alert: WebSocketConnectionDrop
+        expr: rate(websocket_connections_active[5m]) < -5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket connections dropping"
+          description: "Losing {{ $value }} connections/sec"
+
+      # Application Down
+      - alert: ApplicationDown
+        expr: up{job="soc_assistant_backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SOC Assistant application is down"
+          description: "The application has been down for more than 1 minute"

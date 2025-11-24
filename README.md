@@ -34,6 +34,8 @@ A production-ready Security Operations Center (SOC) assistant combining machine 
 - **RESTful API**: Complete API for SIEM integration and automation
 - **Audit Trail**: Comprehensive logging of all security events
 - **Scalable Architecture**: Modular design for enterprise deployment
+- **Prometheus Monitoring**: Production-grade metrics collection and alerting
+- **Grafana Dashboards**: Real-time visualization of system and security metrics
 
 ## 📋 Table of Contents
 
@@ -219,6 +221,7 @@ Server starts on `http://localhost:5000` with:
 - ✅ MongoDB connection
 - ✅ ML model loading (network + NLP)
 - ✅ WebSocket for real-time updates
+- ✅ Prometheus metrics at `/metrics`
 - ✅ Automatic monitoring (PCAP replay every 10s)
 
 ### 2. Start Frontend (New Terminal)
@@ -229,7 +232,19 @@ npm start
 
 Dashboard opens at `http://localhost:3000`
 
-### 3. Login
+### 3. Start Monitoring Stack (Optional)
+```bash
+cd infrastructure
+docker-compose up -d
+```
+
+Access monitoring:
+- **Grafana**: http://localhost:3001 (admin/admin)
+- **Prometheus**: http://localhost:9090
+
+See [MONITORING.md](MONITORING.md) for complete setup guide.
+
+### 4. Login
 - **Username**: `admin`
 - **Password**: `SecureAdmin123!`
 - **Role**: Super Admin
@@ -273,6 +288,9 @@ python train_from_real_alerts.py
 | **Backend API** | http://localhost:5000 | REST API |
 | **WebSocket** | ws://localhost:5000/socket.io | Real-time updates |
 | **MongoDB** | mongodb://localhost:27017 | Database |
+| **Prometheus** | http://localhost:9090 | Metrics collection |
+| **Grafana** | http://localhost:3001 | Monitoring dashboards |
+| **Metrics Endpoint** | http://localhost:5000/metrics | Prometheus metrics |
 
 ## 🔐 User Roles & Access
 
@@ -1091,6 +1109,7 @@ When reporting issues, please include:
 
 | Document | Description |
 |----------|-------------|
+| [MONITORING.md](MONITORING.md) | **Production monitoring infrastructure guide** |
 | [ML_TRAINING_REPORT.md](ML_TRAINING_REPORT.md) | Comprehensive ML training report (650 lines) |
 | [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) | Complete REST API reference |
 | [docs/MONGODB_SETUP.md](docs/MONGODB_SETUP.md) | Database setup and management |
@@ -1154,14 +1173,21 @@ db.users.count()
 
 ### Monitoring
 ```bash
-# Check server logs
-tail -f /tmp/soc_server.log
+# Start monitoring stack
+cd infrastructure && docker-compose up -d
 
-# Monitor MongoDB
-mongo --eval "db.serverStatus()"
+# Access Grafana dashboard
+open http://localhost:3001  # Login: admin/admin
 
-# Check system stats
-curl http://localhost:5000/api/stats
+# View Prometheus metrics
+curl http://localhost:5000/metrics | head -20
+
+# Check health endpoints
+curl http://localhost:5000/health
+curl http://localhost:5000/health/ready
+
+# View monitoring documentation
+cat MONITORING.md
 ```
 
 ---
